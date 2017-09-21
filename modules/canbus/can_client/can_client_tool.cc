@@ -55,28 +55,27 @@ struct TestCanParam {
   int32_t send_lost_cnt = 0;
   int32_t send_time = 0;
   int32_t recv_time = 0;
-  CanClient* can_client = nullptr;
+  CanClient *can_client = nullptr;
 
   TestCanParam() = default;
 
   void print() {
-    std::cout << "conf: " << conf.ShortDebugString()
-              << ", total send: " << send_cnt + send_err_cnt << "/"
-              << FLAGS_agent_mutual_send_frames << ", send_ok: " << send_cnt
-              << " , send_err_cnt: " << send_err_cnt
-              << ", send_lost_cnt: " << send_lost_cnt
-              << ", recv_cnt: " << recv_cnt << ", send_time: " << send_time
-              << ", recv_time: " << recv_time << std::endl;
+    AINFO << "conf: " << conf.ShortDebugString()
+          << ", total send: " << send_cnt + send_err_cnt << "/"
+          << FLAGS_agent_mutual_send_frames << ", send_ok: " << send_cnt
+          << " , send_err_cnt: " << send_err_cnt
+          << ", send_lost_cnt: " << send_lost_cnt << ", recv_cnt: " << recv_cnt
+          << ", send_time: " << send_time << ", recv_time: " << recv_time;
   }
 };
 
 class CanAgent {
  public:
-  explicit CanAgent(TestCanParam* param_ptr) : param_ptr_(param_ptr) {}
+  explicit CanAgent(TestCanParam *param_ptr) : param_ptr_(param_ptr) {}
 
-  TestCanParam* param_ptr() { return param_ptr_; }
+  TestCanParam *param_ptr() { return param_ptr_; }
 
-  CanAgent* other_agent() { return other_agent_; }
+  CanAgent *other_agent() { return other_agent_; }
 
   bool Start() {
     thread_recv_.reset(new std::thread([this] { RecvThreadFunc(); }));
@@ -93,13 +92,13 @@ class CanAgent {
   }
 
   void SendThreadFunc() {
-    using ::apollo::common::time::Clock;
-    using ::apollo::common::time::AsInt64;
-    using ::apollo::common::time::micros;
-    using ::apollo::common::ErrorCode;
+    using common::time::Clock;
+    using common::time::AsInt64;
+    using common::time::micros;
+    using common::ErrorCode;
     AINFO << "Send thread starting...";
-    TestCanParam* param = param_ptr();
-    CanClient* client = param->can_client;
+    TestCanParam *param = param_ptr();
+    CanClient *client = param->can_client;
     std::vector<CanFrame> frames;
     frames.resize(MAX_CAN_SEND_FRAME_LEN);
 
@@ -167,24 +166,24 @@ class CanAgent {
     return;
   }
 
-  void AddOtherAgent(CanAgent* agent) { other_agent_ = agent; }
+  void AddOtherAgent(CanAgent *agent) { other_agent_ = agent; }
 
-  bool is_receiving() { return is_receiving_; }
+  bool is_receiving() const { return is_receiving_; }
 
   void is_receiving(bool val) { is_receiving_ = val; }
 
-  bool is_sending_finish() { return is_sending_finish_; }
+  bool is_sending_finish() const { return is_sending_finish_; }
 
   void is_sending_finish(bool val) { is_sending_finish_ = val; }
 
   void RecvThreadFunc() {
-    using ::apollo::common::time::Clock;
-    using ::apollo::common::time::AsInt64;
-    using ::apollo::common::time::micros;
-    using ::apollo::common::ErrorCode;
+    using common::time::Clock;
+    using common::time::AsInt64;
+    using common::time::micros;
+    using common::ErrorCode;
     AINFO << "Receive thread starting...";
-    TestCanParam* param = param_ptr();
-    CanClient* client = param->can_client;
+    TestCanParam *param = param_ptr();
+    CanClient *client = param->can_client;
     int64_t start = 0;
     std::vector<CanFrame> buf;
 
@@ -238,8 +237,8 @@ class CanAgent {
  private:
   bool is_receiving_ = false;
   bool is_sending_finish_ = false;
-  CanAgent* other_agent_ = nullptr;
-  TestCanParam* param_ptr_ = nullptr;
+  CanAgent *other_agent_ = nullptr;
+  TestCanParam *param_ptr_ = nullptr;
   std::unique_ptr<std::thread> thread_recv_;
   std::unique_ptr<std::thread> thread_send_;
 };
@@ -247,25 +246,25 @@ class CanAgent {
 }  // namespace canbus
 }  // namespace apollo
 
-int main(int32_t argc, char** argv) {
+int main(int32_t argc, char **argv) {
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
 
-  using ::apollo::canbus::CANCardParameter;
-  using ::apollo::canbus::CanClient;
-  using ::apollo::canbus::CanClientFactory;
-  using ::apollo::canbus::TestCanParam;
-  using ::apollo::canbus::CanAgent;
-  using ::apollo::common::ErrorCode;
+  using apollo::canbus::CANCardParameter;
+  using apollo::canbus::CanClient;
+  using apollo::canbus::CanClientFactory;
+  using apollo::canbus::TestCanParam;
+  using apollo::canbus::CanAgent;
+  using apollo::common::ErrorCode;
   CANCardParameter can_client_conf_a;
   std::shared_ptr<TestCanParam> param_ptr_a(new TestCanParam());
   std::shared_ptr<TestCanParam> param_ptr_b(new TestCanParam());
 
-  auto* can_client_factory = CanClientFactory::instance();
+  auto *can_client_factory = CanClientFactory::instance();
   can_client_factory->RegisterCanClients();
 
-  if (!::apollo::common::util::GetProtoFromFile(FLAGS_can_client_conf_file_a,
-                                                &can_client_conf_a)) {
+  if (!apollo::common::util::GetProtoFromFile(FLAGS_can_client_conf_file_a,
+                                              &can_client_conf_a)) {
     AERROR << "Unable to load canbus conf file: "
            << FLAGS_can_client_conf_file_a;
     return 1;
@@ -286,8 +285,8 @@ int main(int32_t argc, char** argv) {
   CANCardParameter can_client_conf_b;
   std::unique_ptr<CanClient> client_b;
   if (!FLAGS_only_one_send) {
-    if (!::apollo::common::util::GetProtoFromFile(FLAGS_can_client_conf_file_b,
-                                                  &can_client_conf_b)) {
+    if (!apollo::common::util::GetProtoFromFile(FLAGS_can_client_conf_file_b,
+                                                &can_client_conf_b)) {
       AERROR << "Unable to load canbus conf file: "
              << FLAGS_can_client_conf_file_b;
       return 1;

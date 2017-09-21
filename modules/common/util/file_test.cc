@@ -18,7 +18,7 @@
 
 #include "gtest/gtest.h"
 #include "modules/common/log.h"
-#include "modules/common/util/testing/simple.pb.h"
+#include "modules/common/util/testdata/simple.pb.h"
 
 namespace apollo {
 namespace common {
@@ -54,6 +54,27 @@ TEST_F(FileTest, GetSetASCIIFile) {
   EXPECT_EQ(message.text(), read_message.text());
 }
 
+TEST_F(FileTest, GetSetBinaryFile) {
+  const std::string path = FilePath("output.pb.bin");
+
+  test::SimpleMessage message;
+  message.set_integer(17);
+  message.set_text("This is some piece of text.");
+
+  EXPECT_TRUE(SetProtoToBinaryFile(message, path));
+
+  test::SimpleMessage read_message;
+  EXPECT_TRUE(GetProtoFromBinaryFile(path, &read_message));
+
+  EXPECT_EQ(message.integer(), read_message.integer());
+  EXPECT_EQ(message.text(), read_message.text());
+}
+
+TEST_F(FileTest, PathExists) {
+  EXPECT_TRUE(PathExists("/root"));
+  EXPECT_FALSE(PathExists("/something_impossible"));
+}
+
 TEST_F(FileTest, EnsureAndRemoveDirectory) {
   const std::string directory_path = FilePath("my_directory/haha/hehe");
   EXPECT_FALSE(DirectoryExists(directory_path));
@@ -77,6 +98,6 @@ TEST_F(FileTest, RemoveAllFiles) {
   EXPECT_FALSE(GetProtoFromASCIIFile(path2, &message));
 }
 
-}  // namespace file
+}  // namespace util
 }  // namespace common
 }  // namespace apollo

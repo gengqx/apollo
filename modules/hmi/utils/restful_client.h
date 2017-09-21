@@ -22,8 +22,8 @@
 #ifndef MODULES_HMI_UTILS_RESTFUL_CLIENT_H_
 #define MODULES_HMI_UTILS_RESTFUL_CLIENT_H_
 
-#include <google/protobuf/message.h>
 #include <string>
+#include "google/protobuf/message.h"
 
 /**
  * @namespace apollo::hmi
@@ -52,7 +52,13 @@ class RestfulClient {
    * It init client with an APT url
    * @param url the API url string.
    */
-  explicit RestfulClient(const std::string& url) : url_(url) {}
+  explicit RestfulClient(const std::string &url) : url_(url) {
+    dev_null_ = fopen("/dev/null", "w+");
+  }
+
+  ~RestfulClient() {
+    fclose(dev_null_);
+  }
 
   /*
    * @brief post a proto to target API. Note that the data is transferred as
@@ -60,9 +66,10 @@ class RestfulClient {
    * @param proto the proto to be posted to target API.
    * @return the status define by google::protobuf::util::MessageToJsonString
    */
-  STATUS Post(const google::protobuf::Message& proto);
+  STATUS Post(const google::protobuf::Message &proto);
 
  private:
+  FILE *dev_null_;
   const std::string url_;
 };
 

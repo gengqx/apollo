@@ -22,16 +22,13 @@
 // data file
 DECLARE_string(control_conf_file);
 
-DECLARE_double(min_alert_interval);
-DECLARE_bool(enable_csv_debug);
+DECLARE_string(adapter_config_filename);
 
-// gflags for test purpose
-DECLARE_bool(use_state_exact_match);
+DECLARE_bool(enable_csv_debug);
 
 // temporary gflag for test purpose
 DECLARE_bool(enable_speed_station_preview);
 
-DECLARE_bool(enable_control_watchdog);
 DECLARE_string(node_name);
 DECLARE_bool(is_control_test_mode);
 DECLARE_bool(use_preview_speed_for_table);
@@ -46,5 +43,7 @@ DECLARE_double(max_acceleration_when_stopped);
 DECLARE_double(max_abs_speed_when_stopped);
 
 DECLARE_double(steer_angle_rate);
+DECLARE_bool(enable_gain_scheduler);
+DECLARE_bool(set_steer_limit);
 
 #endif  // MODULES_CONTROL_COMMON_CONTROL_GFLAGS_H_

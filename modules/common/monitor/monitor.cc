@@ -14,8 +14,8 @@
  * limitations under the License.
  *****************************************************************************/
 
-#include "modules/common/adapters/adapter_manager.h"
 #include "modules/common/monitor/monitor.h"
+#include "modules/common/adapters/adapter_manager.h"
 #include "modules/common/time/time.h"
 
 namespace apollo {
@@ -44,7 +44,7 @@ void Monitor::Publish(const std::vector<MessageItem> &messages) const {
 }
 
 void Monitor::DoPublish(MonitorMessage *message) const {
-  AdapterManager::FillMonitorHeader("monitor", message->mutable_header());
+  AdapterManager::FillMonitorHeader("monitor", message);
   AdapterManager::PublishMonitor(*message);
 }
 

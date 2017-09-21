@@ -44,7 +44,7 @@ namespace math {
  * @return Moore-Penrose pseudo-inverse of the given matrix.
  */
 template <typename T, unsigned int N>
-Eigen::Matrix<T, N, N> PseudoInverse(const Eigen::Matrix<T, N, N>& m,
+Eigen::Matrix<T, N, N> PseudoInverse(const Eigen::Matrix<T, N, N> &m,
                                      const double epsilon = 1.0e-6) {
   Eigen::JacobiSVD<Eigen::Matrix<T, N, N>> svd(
       m, Eigen::ComputeFullU | Eigen::ComputeFullV);
@@ -54,6 +54,22 @@ Eigen::Matrix<T, N, N> PseudoInverse(const Eigen::Matrix<T, N, N>& m,
              .matrix()
              .asDiagonal() *
          svd.matrixU().adjoint();
+}
+
+/**
+ * @brief Computes the Moore-Penrose pseudo-inverse of a given matrix,
+ * rounding all eigenvalues with absolute value bounded by epsilon to zero.
+ *
+ * @param m The matrix to be pseudo-inverted
+ * @param epsilon A small positive real number (optional; default is 1.0e-6).
+ *
+ * @return Moore-Penrose pseudo-inverse of the given matrix.
+ */
+template <typename T, unsigned int M, unsigned int N>
+Eigen::Matrix<T, N, M> PseudoInverse(const Eigen::Matrix<T, M, N>& m,
+        const double epsilon = 1.0e-6) {
+    Eigen::Matrix<T, M, M> t = m * m.transpose();
+    return m.transpose() * PseudoInverse<T, M>(t);
 }
 
 /**
@@ -67,7 +83,7 @@ Eigen::Matrix<T, N, N> PseudoInverse(const Eigen::Matrix<T, N, N>& m,
  * @return Matrix
  */
 template <typename T, unsigned int N>
-Eigen::Matrix<T, N, N> ContinuousToDiscrete(const Eigen::Matrix<T, N, N>& m_c,
+Eigen::Matrix<T, N, N> ContinuousToDiscrete(const Eigen::Matrix<T, N, N> &m_c,
                                             const double ts) {
   Eigen::Matrix<T, N, N> m_identity = Eigen::Matrix<T, N, N>::Identity();
   Eigen::Matrix<T, N, N> m_d = (m_identity + ts * 0.5 * m_c) *

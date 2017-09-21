@@ -9,6 +9,9 @@ cc_library(
     deps = [
         ":restful_client",
         "//external:gflags",
+        "//modules/common/util",
+        "//modules/common/util:string_util",
+        "//modules/hmi/proto:config_proto",
         "//modules/hmi/proto:runtime_status_proto",
     ],
 )
@@ -19,7 +22,7 @@ cc_library(
     hdrs = ["restful_client.h"],
     deps = [
         "//modules/common:log",
-        "@com_github_google_protobuf//:protobuf",
+        "@com_google_protobuf//:protobuf",
         "@curlpp//:curlpp",
         "@glog//:glog",
     ],
@@ -29,11 +32,12 @@ cc_test(
     name = "restful_client_test",
     size = "small",
     srcs = ["restful_client_test.cc"],
-    deps = ["//modules/hmi/utils:restful_client",
-            "//modules/hmi/proto:runtime_status_proto",
-            "@gtest//:main",
-            "//external:gflags",
-    ]
+    deps = [
+        "//external:gflags",
+        "//modules/hmi/proto:runtime_status_proto",
+        "//modules/hmi/utils:restful_client",
+        "@gtest//:main",
+    ],
 )
 
 cpplint()

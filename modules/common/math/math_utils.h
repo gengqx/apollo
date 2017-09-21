@@ -35,6 +35,8 @@ namespace apollo {
 namespace common {
 namespace math {
 
+double Sqr(const double x);
+
 /**
  * @brief Cross product between two 2-D vectors from the common start point,
  *        and end at two other points.
@@ -44,8 +46,8 @@ namespace math {
  *
  * @return The cross product result.
  */
-double CrossProd(const Vec2d& start_point, const Vec2d& end_point_1,
-                 const Vec2d& end_point_2);
+double CrossProd(const Vec2d &start_point, const Vec2d &end_point_1,
+                 const Vec2d &end_point_2);
 
 /**
  * @brief Inner product between two 2-D vectors from the common start point,
@@ -56,8 +58,8 @@ double CrossProd(const Vec2d& start_point, const Vec2d& end_point_1,
  *
  * @return The inner product result.
  */
-double InnerProd(const Vec2d& start_point, const Vec2d& end_point_1,
-                 const Vec2d& end_point_2);
+double InnerProd(const Vec2d &start_point, const Vec2d &end_point_1,
+                 const Vec2d &end_point_2);
 
 /**
  * @brief Cross product between two vectors.
@@ -100,6 +102,14 @@ double WrapAngle(const double angle);
  * @return The normalized value of the angle.
  */
 double NormalizeAngle(const double angle);
+
+/**
+ * @brief Calculate the difference between angle from and to
+ * @param from the start angle
+ * @param from the end angle
+ * @return The difference between from and to. The range is between [0, PI).
+ */
+double AngleDiff(const double from, const double to);
 
 /**
  * @brief Get a random integer between two integer values by a random seed.
@@ -152,12 +162,20 @@ T Clamp(const T value, T bound1, T bound2) {
   return value;
 }
 
-int double_compare(
+const double kDoubleEpsilon = 0.001;
+
+int DoubleCompare(
     const double d1, const double d2,
-    const double epsilon = std::numeric_limits<double>::epsilon());
+    const double epsilon = kDoubleEpsilon);
+
+// Gaussian
+double Gaussian(const double u, const double std, const double x);
+
+// Sigmoid
+double Sigmoid(const double x);
 
 }  // namespace math
 }  // namespace common
 }  // namespace apollo
 
-#endif /* MODULES_COMMON_MATH_UTILS_H_ */
+#endif  // MODULES_COMMON_MATH_UTILS_H_

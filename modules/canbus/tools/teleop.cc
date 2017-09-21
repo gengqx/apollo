@@ -38,11 +38,11 @@ DEFINE_double(steer_inc_delta, 2.0, "steer delta percentage");
 
 namespace {
 
-using ::apollo::common::adapter::AdapterManager;
-using ::apollo::common::time::Clock;
-using ::apollo::control::ControlCommand;
-using ::apollo::canbus::Chassis;
-using ::apollo::control::PadMessage;
+using apollo::common::adapter::AdapterManager;
+using apollo::common::time::Clock;
+using apollo::control::ControlCommand;
+using apollo::canbus::Chassis;
+using apollo::control::PadMessage;
 
 const uint32_t KEYCODE_O = 0x4F;  // '0'
 
@@ -115,28 +115,28 @@ class Teleop {
     double brake = 0;
     double throttle = 0;
     double steering = 0;
-    struct termios _cooked;
-    struct termios _raw;
-    int32_t _kfd = 0;
+    struct termios cooked_;
+    struct termios raw_;
+    int32_t kfd_ = 0;
     bool parking_brake = false;
     Chassis::GearPosition gear = Chassis::GEAR_INVALID;
     PadMessage pad_msg;
-    ControlCommand& control_command_ = control_command();
+    ControlCommand &control_command_ = control_command();
 
     // get the console in raw mode
-    tcgetattr(_kfd, &_cooked);
-    std::memcpy(&_raw, &_cooked, sizeof(struct termios));
-    _raw.c_lflag &= ~(ICANON | ECHO);
+    tcgetattr(kfd_, &cooked_);
+    std::memcpy(&raw_, &cooked_, sizeof(struct termios));
+    raw_.c_lflag &= ~(ICANON | ECHO);
     // Setting a new line, then end of file
-    _raw.c_cc[VEOL] = 1;
-    _raw.c_cc[VEOF] = 2;
-    tcsetattr(_kfd, TCSANOW, &_raw);
+    raw_.c_cc[VEOL] = 1;
+    raw_.c_cc[VEOF] = 2;
+    tcsetattr(kfd_, TCSANOW, &raw_);
     puts("Teleop:\nReading from keyboard now.");
     puts("---------------------------");
     puts("Use arrow keys to drive the car.");
     while (IsRunning()) {
       // get the next event from the keyboard
-      if (read(_kfd, &c, 1) < 0) {
+      if (read(kfd_, &c, 1) < 0) {
         perror("read():");
         exit(-1);
       }
@@ -196,7 +196,7 @@ class Teleop {
         case KEYCODE_SETT1:  // set throttle
         case KEYCODE_SETT2:
           // read keyboard again
-          if (read(_kfd, &c, 1) < 0) {
+          if (read(kfd_, &c, 1) < 0) {
             exit(-1);
           }
           level = c - KEYCODE_ZERO;
@@ -208,7 +208,7 @@ class Teleop {
         case KEYCODE_SETG1:
         case KEYCODE_SETG2:
           // read keyboard again
-          if (read(_kfd, &c, 1) < 0) {
+          if (read(kfd_, &c, 1) < 0) {
             exit(-1);
           }
           level = c - KEYCODE_ZERO;
@@ -219,7 +219,7 @@ class Teleop {
         case KEYCODE_SETB1:
         case KEYCODE_SETB2:
           // read keyboard again
-          if (read(_kfd, &c, 1) < 0) {
+          if (read(kfd_, &c, 1) < 0) {
             exit(-1);
           }
           level = c - KEYCODE_ZERO;
@@ -230,11 +230,11 @@ class Teleop {
           break;
         case KEYCODE_MODE:
           // read keyboard again
-          if (read(_kfd, &c, 1) < 0) {
+          if (read(kfd_, &c, 1) < 0) {
             exit(-1);
           }
           level = c - KEYCODE_ZERO;
-          GetPadMessage(pad_msg, level);
+          GetPadMessage(&pad_msg, level);
           control_command_.mutable_pad_msg()->CopyFrom(pad_msg);
           sleep(1);
           control_command_.mutable_pad_msg()->Clear();
@@ -248,12 +248,12 @@ class Teleop {
           break;
       }
     }  // keyboard_loop big while
-    tcsetattr(_kfd, TCSANOW, &_cooked);
+    tcsetattr(kfd_, TCSANOW, &cooked_);
     printf("keyboard_loop thread quited.\n");
     return;
   }  // end of keyboard loop thread
 
-  ControlCommand& control_command() { return control_command_; }
+  ControlCommand &control_command() { return control_command_; }
 
   Chassis::GearPosition GetGear(int32_t gear) {
     switch (gear) {
@@ -276,7 +276,7 @@ class Teleop {
     }
   }
 
-  void GetPadMessage(PadMessage& pad_msg, int32_t int_action) {
+  void GetPadMessage(PadMessage *pad_msg, int32_t int_action) {
     apollo::control::DrivingAction action =
         apollo::control::DrivingAction::RESET;
     switch (int_action) {
@@ -292,7 +292,7 @@ class Teleop {
         printf("unknown action:%d, use default RESET\n", int_action);
         break;
     }
-    pad_msg.set_action(action);
+    pad_msg->set_action(action);
     return;
   }
 
@@ -307,8 +307,7 @@ class Teleop {
   }
 
   void Send() {
-    AdapterManager::FillControlCommandHeader("control",
-                                             control_command_.mutable_header());
+    AdapterManager::FillControlCommandHeader("control", &control_command_);
     AdapterManager::PublishControlCommand(control_command_);
     ADEBUG << "Control Command send OK:" << control_command_.ShortDebugString();
   }
@@ -328,7 +327,7 @@ class Teleop {
     control_command_.set_gear_location(Chassis::GEAR_INVALID);
   }
 
-  void OnChassis(const Chassis& chassis) { Send(); }
+  void OnChassis(const Chassis &chassis) { Send(); }
 
   int32_t Start() {
     if (is_running_) {
@@ -336,7 +335,7 @@ class Teleop {
       return -1;
     }
     is_running_ = true;
-    AdapterManager::SetChassisCallback(&Teleop::OnChassis, this);
+    AdapterManager::AddChassisCallback(&Teleop::OnChassis, this);
     keyboard_thread_.reset(
         new std::thread([this] { KeyboardLoopThreadFunc(); }));
     if (keyboard_thread_ == nullptr) {
@@ -381,9 +380,9 @@ void signal_handler(int32_t signal_num) {
   ros::shutdown();
 }
 
-}  // end of namespace;
+}  // namespace
 
-int main(int32_t argc, char** argv) {
+int main(int32_t argc, char **argv) {
   google::InitGoogleLogging(argv[0]);
   FLAGS_alsologtostderr = true;
   FLAGS_v = 3;
@@ -396,14 +395,14 @@ int main(int32_t argc, char** argv) {
   apollo::common::adapter::AdapterManagerConfig config;
   config.set_is_ros(true);
   {
-    auto* sub_config = config.add_config();
+    auto *sub_config = config.add_config();
     sub_config->set_mode(apollo::common::adapter::AdapterConfig::PUBLISH_ONLY);
     sub_config->set_type(
         apollo::common::adapter::AdapterConfig::CONTROL_COMMAND);
   }
 
   {
-    auto* sub_config = config.add_config();
+    auto *sub_config = config.add_config();
     sub_config->set_mode(apollo::common::adapter::AdapterConfig::RECEIVE_ONLY);
     sub_config->set_type(apollo::common::adapter::AdapterConfig::CHASSIS);
   }

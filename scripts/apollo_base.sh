@@ -16,11 +16,7 @@
 # limitations under the License.
 ###############################################################################
 
-
 APOLLO_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
-
-START_TIME=$(($(date +%s%N)/1000000))
-TIME=$(date  +%Y%m%d_%H%M)
 
 RED='\033[0;31m'
 YELLOW='\e[33m'
@@ -46,9 +42,13 @@ function print_delim() {
   echo '============================'
 }
 
-print_time() {
-  END_TIME=$(($(date +%s%N)/1000000))
-  ELAPSED_TIME=$(echo "scale=3; ($END_TIME - $START_TIME) / 1000" | bc -l)
+function get_now() {
+  echo $(date +%s)
+}
+
+function print_time() {
+  END_TIME=$(get_now)
+  ELAPSED_TIME=$(echo "$END_TIME - $START_TIME" | bc -l)
   MESSAGE="Took ${ELAPSED_TIME} seconds"
   info "${MESSAGE}"
 }
@@ -68,65 +68,129 @@ function fail() {
   exit -1
 }
 
+# Check whether user has agreed license agreement
+function check_agreement() {
+  agreement_record="$HOME/.cache/.apollo_agreement.txt"
+  if [ ! -e "$agreement_record" ]; then
+     AGREEMENT_FILE="$APOLLO_ROOT_DIR/scripts/AGREEMENT.txt"
+     if [ ! -e "$AGREEMENT_FILE" ]; then
+          error "AGREEMENT $AGREEMENT_FILE does not exist."
+          exit 0
+     fi
+     cat $AGREEMENT_FILE
+     tip="Type 'y' or 'Y' to agree to the license agreement above, or type any other key to exit"
+     echo $tip
+     read -n 1 user_agreed
+     if [ "$user_agreed" == "y" ] || [ "$user_agreed" == "Y" ]; then
+         rm -rf $agreement_record
+         cat $AGREEMENT_FILE >> $agreement_record
+         echo "$tip" >> $agreement_record
+         echo "$user_agreed" >> $agreement_record
+     else
+         exit 0
+     fi
+  fi
+}
 
-agreement_record="$HOME/.apollo_agreement.txt"
-if [ ! -e "$agreement_record" ]; then
-   AGREEMENT_FILE="$APOLLO_ROOT_DIR/scripts/AGREEMENT.txt"
-   if [ ! -e "$AGREEMENT_FILE" ]; then
-        error "AGREEMENT $AGREEMENT_FILE does not exist."
-        exit 0
-   fi
-   cat $AGREEMENT_FILE
-   tip="Type 'y' or 'Y' to agree to the license agreement above, or type any other key to exit"
-   echo $tip 
-   read -n 1 user_agreed
-   if [ "$user_agreed" == "y" ] || [ "$user_agreed" == "Y" ]; then
-       rm -rf $agreement_record
-       cat $AGREEMENT_FILE >> $agreement_record
-       echo "$tip" >> $agreement_record
-       echo "$user_agreed" >> $agreement_record
-   else
-       exit 0
-   fi
-fi
+function check_in_docker() {
+  if [ -f /.dockerenv ]; then
+      APOLLO_IN_DOCKER=true
+      check_agreement
+  else
+      APOLLO_IN_DOCKER=false
+  fi
+  export APOLLO_IN_DOCKER
+}
 
+function set_lib_path() {
+  if [ "$RELEASE_DOCKER" == 1 ];then
+      source /apollo/ros/setup.bash
+      export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/apollo/lib
+      PY_LIB_PATH=/apollo/lib
+      PY_TOOLS_PATH=/apollo/modules/tools
+  else
+      local MD5=`echo -n $APOLLO_ROOT_DIR | md5sum | cut -d' ' -f1`
+      local ROS_SETUP="${HOME}/.cache/bazel/_bazel_${USER}/${MD5}/external/ros/setup.bash"
+      if [ -e "${ROS_SETUP}" ]; then
+         source "${ROS_SETUP}"
+      fi
+      PY_LIB_PATH=${APOLLO_ROOT_DIR}/py_proto
+      PY_TOOLS_PATH=${APOLLO_ROOT_DIR}/modules/tools
+      export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/apollo/lib:/apollo/bazel-genfiles/external/caffe/lib
+  fi
+  export PYTHONPATH=${PY_LIB_PATH}:${PY_TOOLS_PATH}:${PYTHONPATH}
+  if [ -e /usr/local/cuda-8.0/ ];then
+      export PATH=/usr/local/cuda-8.0/bin:$PATH
+      export LD_LIBRARY_PATH=/usr/local/cuda-8.0/lib64:$LD_LIBRARY_PATH
+      export C_INCLUDE_PATH=/usr/local/cuda-8.0/include:$C_INCLUDE_PATH
+      export CPLUS_INCLUDE_PATH=/usr/local/cuda-8.0/include:$CPLUS_INCLUDE_PATH
+  fi
+}
 
-if [ -f /.dockerenv ]; then
-    APOLLO_IN_DOCKER=true
-else
-    APOLLO_IN_DOCKER=false
-fi
+function create_data_dir() {
+  local DATA_DIR=""
+  if [ "$RELEASE_DOCKER" != "1" ];then
+      DATA_DIR="${APOLLO_ROOT_DIR}/data"
+  else
+      DATA_DIR="${HOME}/data"
+  fi
+  if [ ! -e "${DATA_DIR}/log" ]; then
+      mkdir -p "${DATA_DIR}/log"
+  fi
 
-if [ "$RELEASE_DOCKER" == 1 ];then
-    source /apollo/ros/setup.bash
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/apollo/lib
-    export PYTHONPATH=/apollo/lib:${PYTHONPATH}
-else
-    if [ -e "${APOLLO_ROOT_DIR}/bazel-apollo/external/ros/setup.bash" ]; then
-       source "${APOLLO_ROOT_DIR}/bazel-apollo/external/ros/setup.bash"
+  if [ ! -e "${DATA_DIR}/bag" ]; then
+      mkdir -p "${DATA_DIR}/bag"
+  fi
+
+  if [ ! -e "${DATA_DIR}/core" ]; then
+      mkdir -p "${DATA_DIR}/core"
+  fi
+}
+
+function determine_bin_prefix() {
+  APOLLO_BIN_PREFIX=$APOLLO_ROOT_DIR
+  if [ -e "${APOLLO_ROOT_DIR}/bazel-bin" ]; then
+      APOLLO_BIN_PREFIX="${APOLLO_ROOT_DIR}/bazel-bin"
+  fi
+  export APOLLO_BIN_PREFIX
+}
+
+function find_device() {
+    # ${1} = device pattern
+    local device_list=$(find /dev -name "${1}")
+    if [ -z "${device_list}" ]; then
+        warning "Failed to find device with pattern \"${1}\" ..."
+    else
+        local devices=""
+        for device in $(find /dev -name "${1}"); do
+            ok "Found device: ${device}."
+            devices="${devices} --device ${device}:${device}"
+        done
+        echo "${devices}"
     fi
-    export PYTHONPATH=${APOLLO_ROOT_DIR}/bazel-genfiles:${PYTHONPATH}
-fi
+}
 
-if [ ! -e "${APOLLO_ROOT_DIR}/data/log" ]; then
-    mkdir -p "${APOLLO_ROOT_DIR}/data/log"
-fi
-
-if [ ! -e "${APOLLO_ROOT_DIR}/data/bag" ]; then
-    mkdir -p "${APOLLO_ROOT_DIR}/data/bag"
-fi
-
-if [ ! -e "${APOLLO_ROOT_DIR}/data/core" ]; then
-    mkdir -p "${APOLLO_ROOT_DIR}/data/core"
-fi
-
-
-APOLLO_BIN_PREFIX=$APOLLO_ROOT_DIR
-if [ -e "${APOLLO_ROOT_DIR}/bazel-bin" ]; then
-    APOLLO_BIN_PREFIX="${APOLLO_ROOT_DIR}/bazel-bin"
-fi
-export APOLLO_BIN_PREFIX
-export APOLLO_IN_DOCKER
+function setup_device() {
+    # setup CAN device
+    if [ ! -e /dev/can0 ]; then
+        sudo mknod --mode=a+rw /dev/can0 c 52 0
+    fi
+    # setup nvidia device
+    sudo /sbin/modprobe nvidia
+    sudo /sbin/modprobe nvidia-uvm
+    if [ ! -e /dev/nvidia0 ];then
+        sudo mknod -m 666 /dev/nvidia0 c 195 0
+    fi
+    if [ ! -e /dev/nvidiactl ];then
+        sudo mknod -m 666 /dev/nvidiactl c 195 255
+    fi
+    if [ ! -e /dev/nvidia-uvm ];then
+        sudo mknod -m 666 /dev/nvidia-uvm c 243 0
+    fi
+    if [ ! -e /dev/nvidia-uvm-tools ];then
+        sudo mknod -m 666 /dev/nvidia-uvm-tools c 243 1
+    fi
+}
 
 function is_stopped() {
     MODULE=${1}
@@ -140,12 +204,15 @@ function is_stopped() {
 
 function start() {
     MODULE=$1
+    shift
+
     LOG="${APOLLO_ROOT_DIR}/data/log/${MODULE}.out"
     is_stopped "${MODULE}"
     if [ $? -eq 1 ]; then
         eval "nohup ${APOLLO_BIN_PREFIX}/modules/${MODULE}/${MODULE} \
             --flagfile=modules/${MODULE}/conf/${MODULE}.conf \
-            --log_dir=${APOLLO_ROOT_DIR}/data/log  </dev/null >${LOG} 2>&1 &"
+            --log_dir=${APOLLO_ROOT_DIR}/data/log $@ </dev/null >${LOG} 2>&1 &"
+        sleep 0.5
         is_stopped "${MODULE}"
         if [ $? -eq 0 ]; then
             echo "Launched module ${MODULE}."
@@ -162,9 +229,11 @@ function start() {
 
 function start_fe() {
     MODULE=$1
+    shift
+
     eval "${APOLLO_BIN_PREFIX}/modules/${MODULE}/${MODULE} \
         --flagfile=modules/${MODULE}/conf/${MODULE}.conf \
-        --log_dir=${APOLLO_ROOT_DIR}/data/log"
+        --log_dir=${APOLLO_ROOT_DIR}/data/log $@"
 }
 
 function stop() {
@@ -177,7 +246,7 @@ function stop() {
     fi
 }
 
-function print_usage() {
+function help() {
   echo "Usage:
   ./$0 [COMMAND]"
   echo "COMMAND:
@@ -190,21 +259,29 @@ function print_usage() {
 
 # run command_name module_name
 function run() {
-    case $1 in
+    local module=$1
+    local cmd=$2
+    shift 2
+    case $cmd in
         start)
-            start "$2"
+            start $module "$@"
             ;;
         start_fe)
-            start_fe "$2"
+            start_fe $module "$@"
             ;;
         stop)
-            stop "$2"
+            stop $module
             ;;
         help)
-            print_usage
+            help
             ;;
         *)
-            start "$2"
+            start $module "$@"
             ;;
     esac
 }
+
+check_in_docker
+create_data_dir
+set_lib_path
+determine_bin_prefix

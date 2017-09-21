@@ -16,20 +16,16 @@
 # limitations under the License.
 ###############################################################################
 
-set -x
-
 TIME=$(date  +%Y%m%d_%H%M)
 if [ -z "${DOCKER_REPO}" ]; then
     DOCKER_REPO=apolloauto/apollo
 fi
 
-
 APOLLO_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )"
-TAG="dev-${TIME}"
+ARCH=$(uname -m)
+TAG="dev-${ARCH}-${TIME}"
 
 # Build image from APOLLO_ROOT, while use the specified Dockerfile.
 docker build -t "${DOCKER_REPO}:${TAG}" \
-    -f "${APOLLO_ROOT}/docker/dev.dockerfile" \
+    -f "${APOLLO_ROOT}/docker/dev.${ARCH}.dockerfile" \
     "${APOLLO_ROOT}"
-
-sed -i "s/dev-.*\"/${TAG}\"/g" ${APOLLO_ROOT}/docker/scripts/dev_start.sh

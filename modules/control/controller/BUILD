@@ -22,13 +22,15 @@ cc_library(
     deps = [
         ":controller_interface",
         "//modules/common:log",
+        "//modules/common/configs:vehicle_config_helper",
         "//modules/common/math:euler_angles_zxy",
         "//modules/common/math:lqr",
         "//modules/common/math:math_utils",
         "//modules/common/proto:common_proto",
+        "//modules/common/status",
         "//modules/common/time",
         "//modules/control/common:control_gflags",
-        "//modules/control/common:definitions",
+        "//modules/control/common:interpolation_1d",
         "//modules/control/common:trajectory_analyzer",
         "//modules/control/filters:digital_filter",
         "//modules/control/filters:digital_filter_coefficients",
@@ -49,10 +51,10 @@ cc_library(
     deps = [
         ":controller_interface",
         "//modules/common:log",
+        "//modules/common/status",
         "//modules/common/time",
         "//modules/common/vehicle_state",
         "//modules/control/common:control_gflags",
-        "//modules/control/common:definitions",
         "//modules/control/common:interpolation_2d",
         "//modules/control/common:pid_controller",
         "//modules/control/common:trajectory_analyzer",
@@ -91,6 +93,7 @@ cc_library(
         "//modules/common/util:factory",
         "//modules/control/proto:control_proto",
         "//modules/planning/proto:planning_proto",
+        "@ros//:ros_common",
     ],
 )
 

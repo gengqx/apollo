@@ -10,12 +10,12 @@ soft_estop_brake: 50.0
 active_controllers: LAT_CONTROLLER
 active_controllers: LON_CONTROLLER
 max_steering_percentage_allowed: 100
+minimum_speed_resolution: 0.2
 lat_controller_conf {
   ts: 0.01
   preview_window: 0
   cf: 155494.663
   cr: 155494.663
-  wheelbase: 2.85
   mass_fl: 520
   mass_fr: 520
   mass_rl: 520
@@ -27,9 +27,52 @@ lat_controller_conf {
   matrix_q: 0.0
   cutoff_freq: 10
   mean_filter_window_size: 10
-  steer_transmission_ratio: 16
-  steer_single_direction_max_degree: 470
   max_iteration: 150
+  max_lateral_acceleration: 5.0
+  lat_err_gain_scheduler {
+    scheduler {
+      speed: 4.0
+      ratio: 1.0
+    }
+    scheduler {
+      speed: 8.0
+      ratio: 0.6
+    }
+    scheduler {
+      speed: 12.0
+      ratio: 0.4
+    }
+    scheduler {
+      speed: 20.0
+      ratio: 0.3
+    }
+    scheduler {
+      speed: 25.0
+      ratio: 0.2
+    }
+  }
+  heading_err_gain_scheduler {
+    scheduler {
+      speed: 4.0
+      ratio: 1.0
+    }
+    scheduler {
+      speed: 8.0
+      ratio: 0.6
+    }
+    scheduler {
+      speed: 12.0
+      ratio: 0.6
+    }
+    scheduler {
+      speed: 20.0
+      ratio: 0.4
+    }
+    scheduler {
+      speed: 25.0
+      ratio: 0.4
+    }
+  }
 }
 lon_controller_conf {
   ts: 0.01
@@ -61,13 +104,7 @@ lon_controller_conf {
     kd: 0.0
   }
   switch_speed: 2.0
-  throttle_filter_conf {
-    cutoff_freq: 10
-  }
-  brake_filter_conf {
-    cutoff_freq: 10
-  }
-  acceleration_filter_conf {
+  pitch_angle_filter_conf {
     cutoff_freq: 5
   }
   calibration_table {

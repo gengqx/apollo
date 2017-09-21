@@ -3,6 +3,7 @@ package apollo.control;
 
 import "modules/canbus/proto/chassis.proto";
 import "modules/common/proto/header.proto";
+import "modules/common/proto/vehicle_signal.proto";
 import "modules/control/proto/pad_msg.proto";
 
 enum TurnSignal {
@@ -24,10 +25,10 @@ message ControlCommand {
   // target brake in percentage [0, 100]
   optional double brake = 4;
 
-  // target steering rate, in percentage of full scale per second [-100, 100]
+  // target non-directional steering rate, in percentage of full scale per second [0, 100]
   optional double steering_rate = 6;
 
-  // target steerig angle, in percentage of full scalce [-100, 100]
+  // target steering angle, in percentage of full scale [-100, 100]
   optional double steering_target = 7;
 
   // parking brake engage. true: engaged
@@ -49,7 +50,7 @@ message ControlCommand {
   optional apollo.canbus.Chassis.GearPosition gear_location = 20;
 
   optional Debug debug = 22;
-  optional apollo.canbus.Signal signal = 23;
+  optional apollo.common.VehicleSignal signal = 23;
   optional LatencyStats latency_stats = 24;
   optional PadMessage pad_msg = 25;
 
@@ -100,6 +101,7 @@ message SimpleLateralDebug {
   optional double steer_angle_feedback = 14;
   optional double steering_position = 15;
   optional double ref_speed = 16;
+  optional double steer_angle_limited = 17;
 }
 
 message InputDebug {

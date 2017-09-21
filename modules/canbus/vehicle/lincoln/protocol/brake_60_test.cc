@@ -18,9 +18,6 @@
 
 #include "gtest/gtest.h"
 
-#include <bitset>
-#include <iostream>
-
 namespace apollo {
 namespace canbus {
 namespace lincoln {
@@ -46,5 +43,5 @@ TEST_F(Brake60Test, simple) {
 }
 
 }  // namespace lincoln
-}  // namespace apollo
 }  // namespace canbus
+}  // namespace apollo

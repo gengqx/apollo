@@ -82,28 +82,27 @@ class Control : public apollo::common::ApolloApp {
 
  private:
   // Upon receiving pad message
-  void OnPad(const apollo::control::PadMessage& pad);
+  void OnPad(const apollo::control::PadMessage &pad);
 
   // Upon receiving monitor message
   void OnMonitor(
-      const apollo::common::monitor::MonitorMessage& monitor_message);
+      const apollo::common::monitor::MonitorMessage &monitor_message);
 
   // Watch dog timer
-  void OnTimer(const ros::TimerEvent&);
+  void OnTimer(const ros::TimerEvent &);
 
-  Status ProduceControlCommand(ControlCommand* control_command);
-  Status CheckInput();
-  Status CheckTimestamp();
-  Status CheckPad();
+  common::Status ProduceControlCommand(ControlCommand *control_command);
+  common::Status CheckInput();
+  common::Status CheckTimestamp();
+  common::Status CheckPad();
 
-  void Alert();
-  void SendCmd(ControlCommand* control_command);
+  void SendCmd(ControlCommand *control_command);
 
  private:
-  ::apollo::localization::LocalizationEstimate localization_;
-  ::apollo::canbus::Chassis chassis_;
-  ::apollo::planning::ADCTrajectory trajectory_;
-  ::apollo::control::PadMessage pad_msg_;
+  localization::LocalizationEstimate localization_;
+  canbus::Chassis chassis_;
+  planning::ADCTrajectory trajectory_;
+  PadMessage pad_msg_;
 
   ControllerAgent controller_agent_;
 
@@ -114,8 +113,6 @@ class Control : public apollo::common::ApolloApp {
   unsigned int status_sanity_check_failed_ = 0;
   unsigned int total_status_lost_ = 0;
   unsigned int total_status_sanity_check_failed_ = 0;
-
-  double last_alert_timestamp_ = 0.0;
 
   ControlConf control_conf_;
 

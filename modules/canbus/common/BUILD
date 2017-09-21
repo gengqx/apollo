@@ -1,3 +1,5 @@
+load("//tools:cpplint.bzl", "cpplint")
+
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
@@ -14,6 +16,7 @@ cc_library(
     deps = [
         "//external:gflags",
         "//modules/canbus/proto:canbus_proto",
+        "//modules/common:log",
     ],
 )
 
@@ -28,3 +31,5 @@ cc_test(
         "@gtest//:main",
     ],
 )
+
+cpplint()

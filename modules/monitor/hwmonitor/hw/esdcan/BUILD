@@ -1,3 +1,5 @@
+load("//tools:cpplint.bzl", "cpplint")
+
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
@@ -10,6 +12,7 @@ cc_library(
     ],
     hdrs = glob(["*.h"]),
     deps = [
+        "//modules/common/util:string_util",
         "//modules/monitor/common:interface",
         "//modules/monitor/common:platform_common_lib",
         "//modules/monitor/hwmonitor/hw:platform_hw_log_module_lib",
@@ -27,9 +30,12 @@ cc_library(
     ],
     hdrs = glob(["*.h"]),
     deps = [
+        "//modules/common/util:string_util",
         "//modules/monitor/common:interface",
         "//modules/monitor/common:platform_common_lib",
         "//modules/monitor/hwmonitor/hw:platform_hw_log_module_lib",
         "//third_party/can_card_library/esd_can",
     ],
 )
+
+cpplint()
