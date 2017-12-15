@@ -15,8 +15,10 @@ limitations under the License.
 
 #include "modules/map/hdmap/hdmap_impl.h"
 
+#include <iostream>
 #include <algorithm>
 #include <unordered_set>
+#include <limits>
 
 #include "modules/common/util/file.h"
 #include "modules/common/util/string_util.h"
@@ -36,6 +38,11 @@ Id CreateHDMapId(const std::string& string_id) {
   return id;
 }
 
+// default lanes search radius in GetForwardNearestSignalsOnLane
+constexpr double kLanesSearchRange = 10.0;
+// backward search distance in GetForwardNearestSignalsOnLane
+constexpr int kBackwardDistance = 4;
+
 }  // namespace
 
 int HDMapImpl::LoadMapFromFile(const std::string& map_filename) {
@@ -48,6 +55,7 @@ int HDMapImpl::LoadMapFromFile(const std::string& map_filename) {
   } else if (!apollo::common::util::GetProtoFromFile(map_filename, &map_)) {
     return -1;
   }
+
 
   for (const auto& lane : map_.lane()) {
     lane_table_[lane.id().id()].reset(new LaneInfo(lane));
@@ -67,6 +75,14 @@ int HDMapImpl::LoadMapFromFile(const std::string& map_filename) {
   for (const auto& yield_sign : map_.yield()) {
     yield_sign_table_[yield_sign.id().id()].reset(
         new YieldSignInfo(yield_sign));
+  }
+  for (const auto& clear_area : map_.clear_area()) {
+    clear_area_table_[clear_area.id().id()].reset(
+        new ClearAreaInfo(clear_area));
+  }
+  for (const auto& speed_bump : map_.speed_bump()) {
+    speed_bump_table_[speed_bump.id().id()].reset(
+        new SpeedBumpInfo(speed_bump));
   }
   for (const auto& overlap : map_.overlap()) {
     overlap_table_[overlap.id().id()].reset(new OverlapInfo(overlap));
@@ -96,6 +112,8 @@ int HDMapImpl::LoadMapFromFile(const std::string& map_filename) {
   BuildCrosswalkPolygonKDTree();
   BuildStopSignSegmentKDTree();
   BuildYieldSignSegmentKDTree();
+  BuildClearAreaPolygonKDTree();
+  BuildSpeedBumpSegmentKDTree();
 
   return 0;
 }
@@ -128,6 +146,16 @@ StopSignInfoConstPtr HDMapImpl::GetStopSignById(const Id& id) const {
 YieldSignInfoConstPtr HDMapImpl::GetYieldSignById(const Id& id) const {
   YieldSignTable::const_iterator it = yield_sign_table_.find(id.id());
   return it != yield_sign_table_.end() ? it->second : nullptr;
+}
+
+ClearAreaInfoConstPtr HDMapImpl::GetClearAreaById(const Id& id) const {
+  ClearAreaTable::const_iterator it = clear_area_table_.find(id.id());
+  return it != clear_area_table_.end() ? it->second : nullptr;
+}
+
+SpeedBumpInfoConstPtr HDMapImpl::GetSpeedBumpById(const Id& id) const {
+  SpeedBumpTable::const_iterator it = speed_bump_table_.find(id.id());
+  return it != speed_bump_table_.end() ? it->second : nullptr;
 }
 
 OverlapInfoConstPtr HDMapImpl::GetOverlapById(const Id& id) const {
@@ -314,6 +342,58 @@ int HDMapImpl::GetYieldSigns(
   return 0;
 }
 
+int HDMapImpl::GetClearAreas(
+    const PointENU& point, double distance,
+    std::vector<ClearAreaInfoConstPtr>* clear_areas) const {
+  return GetClearAreas({point.x(), point.y()}, distance, clear_areas);
+}
+
+int HDMapImpl::GetClearAreas(
+    const Vec2d& point, double distance,
+    std::vector<ClearAreaInfoConstPtr>* clear_areas) const {
+  if (clear_areas == nullptr || clear_area_polygon_kdtree_ == nullptr) {
+    return -1;
+  }
+  clear_areas->clear();
+  std::vector<std::string> ids;
+  const int status =
+      SearchObjects(point, distance, *clear_area_polygon_kdtree_, &ids);
+  if (status < 0) {
+    return status;
+  }
+  for (const auto& id : ids) {
+    clear_areas->emplace_back(GetClearAreaById(CreateHDMapId(id)));
+  }
+
+  return 0;
+}
+
+int HDMapImpl::GetSpeedBumps(
+    const PointENU& point, double distance,
+    std::vector<SpeedBumpInfoConstPtr>* speed_bumps) const {
+  return GetSpeedBumps({point.x(), point.y()}, distance, speed_bumps);
+}
+
+int HDMapImpl::GetSpeedBumps(
+    const Vec2d& point, double distance,
+    std::vector<SpeedBumpInfoConstPtr>* speed_bumps) const {
+  if (speed_bumps == nullptr || speed_bump_segment_kdtree_ == nullptr) {
+    return -1;
+  }
+  speed_bumps->clear();
+  std::vector<std::string> ids;
+  const int status =
+      SearchObjects(point, distance, *speed_bump_segment_kdtree_, &ids);
+  if (status < 0) {
+    return status;
+  }
+  for (const auto& id : ids) {
+    speed_bumps->emplace_back(GetSpeedBumpById(CreateHDMapId(id)));
+  }
+
+  return 0;
+}
+
 int HDMapImpl::GetNearestLane(const PointENU& point,
                               LaneInfoConstPtr* nearest_lane, double* nearest_s,
                               double* nearest_l) const {
@@ -489,6 +569,116 @@ int HDMapImpl::GetRoadBoundaries(
   return 0;
 }
 
+int HDMapImpl::GetForwardNearestSignalsOnLane(
+    const apollo::common::PointENU& point,
+    const double distance,
+    std::vector<SignalInfoConstPtr>* signals) const {
+  CHECK_NOTNULL(signals);
+
+  signals->clear();
+  LaneInfoConstPtr lane_ptr = nullptr;
+  double nearest_s = 0.0;
+  double nearest_l = 0.0;
+
+  std::vector<LaneInfoConstPtr> temp_surrounding_lanes;
+  std::vector<LaneInfoConstPtr> surrounding_lanes;
+  int s_index = 0;
+  apollo::common::math::Vec2d car_point;
+  car_point.set_x(point.x());
+  car_point.set_y(point.y());
+  apollo::common::math::Vec2d map_point;
+  if (GetLanes(point, kLanesSearchRange, &temp_surrounding_lanes) == -1) {
+    AINFO << "Can not find lanes around car.";
+    return -1;
+  }
+  for (const auto& surround_lane : temp_surrounding_lanes) {
+    if (surround_lane->IsOnLane(car_point)) {
+      surrounding_lanes.push_back(surround_lane);
+    }
+  }
+  if (surrounding_lanes.empty()) {
+    AINFO << "Car is not on lane.";
+    return -1;
+  }
+  for (const auto& lane : surrounding_lanes) {
+    if (!lane->signals().empty()) {
+        lane_ptr = lane;
+        nearest_l = lane_ptr->DistanceTo(car_point, &map_point,
+                                          &nearest_s, &s_index);
+        break;
+    }
+  }
+  if (lane_ptr == nullptr) {
+    GetNearestLane(point, &lane_ptr, &nearest_s, &nearest_l);
+    if (lane_ptr == nullptr) {
+        return -1;
+    }
+  }
+
+  double unused_distance = distance + kBackwardDistance;
+  double back_distance = kBackwardDistance;
+  double s = nearest_s;
+  while (s < back_distance) {
+    for (const auto& predecessor_lane_id : lane_ptr->lane().predecessor_id()) {
+      lane_ptr = GetLaneById(predecessor_lane_id);
+      if (lane_ptr->lane().turn() == apollo::hdmap::Lane::NO_TURN) {
+        break;
+      }
+    }
+    back_distance = back_distance - s;
+    s = lane_ptr->total_length();
+  }
+  double s_start = s - back_distance;
+  while (lane_ptr != nullptr) {
+    double signal_min_dist = std::numeric_limits<double>::infinity();
+    std::vector<SignalInfoConstPtr> min_dist_signal_ptr;
+    for (const auto& overlap_id : lane_ptr->lane().overlap_id()) {
+      OverlapInfoConstPtr overlap_ptr = GetOverlapById(overlap_id);
+      double lane_overlap_offset_s = 0.0;
+      SignalInfoConstPtr signal_ptr = nullptr;
+      for (int i = 0; i < overlap_ptr->overlap().object_size(); ++i) {
+        if (overlap_ptr->overlap().object(i).id().id() == lane_ptr->id().id()) {
+          lane_overlap_offset_s =
+              overlap_ptr->overlap().object(i).lane_overlap_info().start_s()
+              - s_start;
+          continue;
+        }
+        signal_ptr = GetSignalById(overlap_ptr->overlap().object(i).id());
+        if (signal_ptr == nullptr || lane_overlap_offset_s < 0.0) {
+          break;
+        }
+        if (lane_overlap_offset_s < signal_min_dist) {
+          signal_min_dist = lane_overlap_offset_s;
+          min_dist_signal_ptr.clear();
+          min_dist_signal_ptr.push_back(signal_ptr);
+        } else if (lane_overlap_offset_s < (signal_min_dist + 0.1) &&
+                   lane_overlap_offset_s > (signal_min_dist - 0.1)) {
+          min_dist_signal_ptr.push_back(signal_ptr);
+        }
+      }
+    }
+    if (!min_dist_signal_ptr.empty() &&
+        unused_distance >= signal_min_dist) {
+      *signals = min_dist_signal_ptr;
+      break;
+    }
+    unused_distance = unused_distance - (lane_ptr->total_length() - s_start);
+    if (unused_distance <= 0) {
+      break;
+    }
+    LaneInfoConstPtr tmp_lane_ptr = nullptr;
+    for (const auto& successor_lane_id : lane_ptr->lane().successor_id()) {
+      tmp_lane_ptr = GetLaneById(successor_lane_id);
+      if (tmp_lane_ptr->lane().turn() == apollo::hdmap::Lane::NO_TURN) {
+        break;
+      }
+    }
+    lane_ptr = tmp_lane_ptr;
+    s_start = 0;
+  }
+  return 0;
+}
+
 template <class Table, class BoxTable, class KDTree>
 void HDMapImpl::BuildSegmentKDTree(const Table& table,
                                    const AABoxKDTreeParams& params,
@@ -569,6 +759,22 @@ void HDMapImpl::BuildYieldSignSegmentKDTree() {
                      &yield_sign_segment_kdtree_);
 }
 
+void HDMapImpl::BuildClearAreaPolygonKDTree() {
+  AABoxKDTreeParams params;
+  params.max_leaf_dimension = 5.0;  // meters.
+  params.max_leaf_size = 4;
+  BuildPolygonKDTree(clear_area_table_, params, &clear_area_polygon_boxes_,
+                     &clear_area_polygon_kdtree_);
+}
+
+void HDMapImpl::BuildSpeedBumpSegmentKDTree() {
+  AABoxKDTreeParams params;
+  params.max_leaf_dimension = 5.0;  // meters.
+  params.max_leaf_size = 4;
+  BuildSegmentKDTree(speed_bump_table_, params, &speed_bump_segment_boxes_,
+                     &speed_bump_segment_kdtree_);
+}
+
 template <class KDTree>
 int HDMapImpl::SearchObjects(const Vec2d& center, const double radius,
                              const KDTree& kdtree,
@@ -606,6 +812,10 @@ void HDMapImpl::Clear() {
   stop_sign_segment_kdtree_.reset(nullptr);
   yield_sign_segment_boxes_.clear();
   yield_sign_segment_kdtree_.reset(nullptr);
+  clear_area_polygon_boxes_.clear();
+  clear_area_polygon_kdtree_.reset(nullptr);
+  speed_bump_segment_boxes_.clear();
+  speed_bump_segment_kdtree_.reset(nullptr);
 }
 
 }  // namespace hdmap

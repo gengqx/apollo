@@ -27,9 +27,12 @@
 #include "boost/thread/shared_mutex.hpp"
 
 #include "modules/common/log.h"
+#include "modules/common/util/string_util.h"
+#include "modules/dreamview/backend/handlers/websocket.h"
 #include "modules/dreamview/backend/map/map_service.h"
+#include "modules/dreamview/backend/sim_control/sim_control.h"
 #include "modules/dreamview/backend/simulation_world/simulation_world_service.h"
-#include "modules/dreamview/backend/websocket/websocket.h"
+#include "modules/routing/proto/poi.pb.h"
 
 /**
  * @namespace apollo::dreamview
@@ -50,11 +53,12 @@ class SimulationWorldUpdater {
    * @brief Constructor with the websocket handler.
    * @param websocket Pointer of the websocket handler that has been attached to
    * the server.
+   * @param sim_control Pointer of sim control.
    * @param map_service Pointer of the map service to provide a high-level API
    * of hdmap.
    * @param routing_from_file whether to read initial routing from file.
    */
-  SimulationWorldUpdater(WebSocketHandler *websocket,
+  SimulationWorldUpdater(WebSocketHandler *websocket, SimControl *sim_control,
                          const MapService *map_service,
                          bool routing_from_file = false);
 
@@ -62,6 +66,10 @@ class SimulationWorldUpdater {
    * @brief Starts to push simulation_world to frontend.
    */
   void Start();
+
+  // Time interval, in milliseconds, between pushing SimulationWorld to
+  // frontend.
+  static constexpr double kSimWorldTimeIntervalMs = 100;
 
  private:
   /**
@@ -81,19 +89,48 @@ class SimulationWorldUpdater {
       const nlohmann::json &json,
       apollo::routing::RoutingRequest *routing_request);
 
-  // Time interval, in seconds, between pushing SimulationWorld to frontend.
-  static constexpr double kSimWorldTimeInterval = 0.1;
+  bool ValidateCoordinate(const nlohmann::json &json);
+
+  /**
+   * @brief Tries to load the points of interest from the file if it has
+   * not been.
+   * @return False if failed to load from file,
+   * true otherwise or if it's already loaded.
+   */
+  bool LoadPOI();
+
+  /**
+   * @brief Dumps the latest received message to file.
+   * @param adapter the adapter to perfom dumping
+   * @param adapter_name the name of the adapter
+   */
+  template <typename AdapterType>
+  void DumpMessage(AdapterType *adapter, std::string adapter_name) {
+    if (adapter->DumpLatestMessage()) {
+      sim_world_service_.PublishMonitorMessage(
+          common::monitor::MonitorMessageItem::INFO,
+          common::util::StrCat("Dumped latest ", adapter_name,
+                               " message under /tmp/", adapter_name, "."));
+    } else {
+      sim_world_service_.PublishMonitorMessage(
+          common::monitor::MonitorMessageItem::WARN,
+          common::util::StrCat("Failed to dump latest ", adapter_name,
+                               " message."));
+    }
+  }
 
   ros::Timer timer_;
   SimulationWorldService sim_world_service_;
   const MapService *map_service_;
   WebSocketHandler *websocket_;
+  SimControl *sim_control_;
 
   // End point for requesting default route
-  apollo::routing::RoutingRequest::LaneWaypoint default_end_point_;
+  apollo::routing::POI poi_;
 
   // The json string to be pushed to frontend, which is updated by timer.
   std::string simulation_world_json_;
+  std::string simulation_world_with_planning_json_;
 
   // Mutex to protect concurrent access to simulation_world_json_.
   // NOTE: Use boost until we have std version of rwlock support.

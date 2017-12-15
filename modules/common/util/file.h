@@ -29,6 +29,7 @@
 #include <cstdio>
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include "google/protobuf/io/zero_copy_stream_impl.h"
 #include "google/protobuf/text_format.h"
@@ -49,7 +50,7 @@ bool SetProtoToASCIIFile(const MessageType &message, int file_descriptor) {
   using google::protobuf::io::FileOutputStream;
   using google::protobuf::TextFormat;
   if (file_descriptor < 0) {
-    AERROR << "Invalid file descriptor";
+    AERROR << "Invalid file descriptor.";
     return false;
   }
   ZeroCopyOutputStream *output = new FileOutputStream(file_descriptor);
@@ -69,8 +70,12 @@ bool SetProtoToASCIIFile(const MessageType &message, int file_descriptor) {
 template <typename MessageType>
 bool SetProtoToASCIIFile(const MessageType &message,
                          const std::string &file_name) {
-  return SetProtoToASCIIFile(
-      message, open(file_name.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU));
+  int fd = open(file_name.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
+  if (fd < 0) {
+    AERROR << "Unable to open file " << file_name << " to write.";
+    return false;
+  }
+  return SetProtoToASCIIFile(message, fd);
 }
 
 /**
@@ -88,7 +93,7 @@ bool GetProtoFromASCIIFile(const std::string &file_name, MessageType *message) {
   using google::protobuf::TextFormat;
   int file_descriptor = open(file_name.c_str(), O_RDONLY);
   if (file_descriptor < 0) {
-    AERROR << "Failed to open file " << file_name;
+    AERROR << "Failed to open file " << file_name << " in text mode.";
     // Failed to open;
     return false;
   }
@@ -96,7 +101,7 @@ bool GetProtoFromASCIIFile(const std::string &file_name, MessageType *message) {
   ZeroCopyInputStream *input = new FileInputStream(file_descriptor);
   bool success = TextFormat::Parse(input, message);
   if (!success) {
-    AERROR << "Failed to parse file " << file_name;
+    AERROR << "Failed to parse file " << file_name << " as text proto.";
   }
   delete input;
   close(file_descriptor);
@@ -131,11 +136,11 @@ bool GetProtoFromBinaryFile(const std::string &file_name,
                             MessageType *message) {
   std::fstream input(file_name, std::ios::in | std::ios::binary);
   if (!input.good()) {
-    AERROR << "Failed to open file " << file_name;
+    AERROR << "Failed to open file " << file_name << " in binary mode.";
     return false;
   }
   if (!message->ParseFromIstream(&input)) {
-    AERROR << "Failed to parse file " << file_name;
+    AERROR << "Failed to parse file " << file_name << " as binary proto.";
     return false;
   }
   return true;
@@ -151,19 +156,39 @@ bool GetProtoFromBinaryFile(const std::string &file_name,
  */
 template <typename MessageType>
 bool GetProtoFromFile(const std::string &file_name, MessageType *message) {
+  // Try the binary parser first if it's much likely a binary proto.
   if (EndWith(file_name, ".bin")) {
-    if (!GetProtoFromBinaryFile(file_name, message) &&
-        !GetProtoFromASCIIFile(file_name, message)) {
-      return false;
-    }
-  } else {
-    if (!GetProtoFromASCIIFile(file_name, message) &&
-        !GetProtoFromBinaryFile(file_name, message)) {
-      return false;
-    }
+    return GetProtoFromBinaryFile(file_name, message) ||
+        GetProtoFromASCIIFile(file_name, message);
   }
-  return true;
+
+  return GetProtoFromASCIIFile(file_name, message) ||
+      GetProtoFromBinaryFile(file_name, message);
 }
+
+/**
+ * @brief Get file content as string.
+ * @param file_name The name of the file to read content.
+ * @param content The file content.
+ * @return If the action is successful.
+ */
+bool GetContent(const std::string &file_name, std::string *content);
+
+/**
+ * @brief Translate the source path to a complete path.
+ *        Supported place holders are:
+ *            <ros>, which will be replaced as ROS home.
+ * @param src_path The source path which may contain place holders.
+ * @return The complete path.
+ */
+std::string TranslatePath(const std::string &src_path);
+
+/**
+ * @brief Get absolute path by concatenating prefix and relative_path.
+ * @return The absolute path.
+ */
+std::string GetAbsolutePath(const std::string& prefix,
+                            const std::string& relative_path);
 
 /**
  * @brief Check if the path exists.
@@ -181,6 +206,30 @@ bool PathExists(const std::string &path);
 bool DirectoryExists(const std::string &directory_path);
 
 /**
+ * @brief Copy a file.
+ * @param from The file path to copy from.
+ * @param to The file path to copy to.
+ * @return If the action is successful.
+ */
+bool CopyFile(const std::string &from, const std::string &to);
+
+/**
+ * @brief Copy a directory.
+ * @param from The path to copy from.
+ * @param to The path to copy to.
+ * @return If the action is successful.
+ */
+bool CopyDir(const std::string &from, const std::string &to);
+
+/**
+ * @brief Copy a file or directory.
+ * @param from The path to copy from.
+ * @param to The path to copy to.
+ * @return If the action is successful.
+ */
+bool Copy(const std::string &from, const std::string &to);
+
+/**
  * @brief Check if a specified directory specified by directory_path exists.
  *        If not, recursively create the directory (and its parents).
  * @param directory_path Directory path.
@@ -195,6 +244,13 @@ bool EnsureDirectory(const std::string &directory_path);
  * @return If the action is successful.
  */
 bool RemoveAllFiles(const std::string &directory_path);
+
+/**
+ * @brief List sub-directories.
+ * @param directory_path Directory path.
+ * @return A vector of sub-directories, without the directory_path prefix.
+ */
+std::vector<std::string> ListSubDirectories(const std::string &directory_path);
 
 }  // namespace util
 }  // namespace common

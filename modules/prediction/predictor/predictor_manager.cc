@@ -21,21 +21,23 @@
 #include "modules/prediction/common/prediction_gflags.h"
 #include "modules/prediction/container/container_manager.h"
 #include "modules/prediction/container/obstacles/obstacles_container.h"
-#include "modules/prediction/predictor/pedestrian/regional_predictor.h"
-#include "modules/prediction/predictor/vehicle/free_move_predictor.h"
-#include "modules/prediction/predictor/vehicle/lane_sequence_predictor.h"
+#include "modules/prediction/predictor/free_move/free_move_predictor.h"
+#include "modules/prediction/predictor/lane_sequence/lane_sequence_predictor.h"
+#include "modules/prediction/predictor/move_sequence/move_sequence_predictor.h"
+#include "modules/prediction/predictor/regional/regional_predictor.h"
 
 namespace apollo {
 namespace prediction {
 
-using apollo::perception::PerceptionObstacles;
-using apollo::perception::PerceptionObstacle;
 using apollo::common::adapter::AdapterConfig;
+using apollo::perception::PerceptionObstacle;
+using apollo::perception::PerceptionObstacles;
 
 PredictorManager::PredictorManager() { RegisterPredictors(); }
 
 void PredictorManager::RegisterPredictors() {
   RegisterPredictor(ObstacleConf::LANE_SEQUENCE_PREDICTOR);
+  RegisterPredictor(ObstacleConf::MOVE_SEQUENCE_PREDICTOR);
   RegisterPredictor(ObstacleConf::FREE_MOVE_PREDICTOR);
   RegisterPredictor(ObstacleConf::REGIONAL_PREDICTOR);
 }
@@ -48,7 +50,8 @@ void PredictorManager::Init(const PredictionConf& config) {
       continue;
     }
 
-    if (obstacle_conf.obstacle_type() == PerceptionObstacle::VEHICLE) {
+    if (obstacle_conf.obstacle_type() == PerceptionObstacle::VEHICLE ||
+        obstacle_conf.obstacle_type() == PerceptionObstacle::BICYCLE) {
       if (!obstacle_conf.has_obstacle_status() ||
           !obstacle_conf.has_predictor_type()) {
         ADEBUG << "Vehicle obstacle config ["
@@ -69,6 +72,10 @@ void PredictorManager::Init(const PredictionConf& config) {
   AINFO << "Defined vehicle on lane obstacle predictor ["
         << vehicle_on_lane_predictor_ << "].";
   AINFO << "Defined vehicle off lane obstacle predictor ["
+        << vehicle_off_lane_predictor_ << "].";
+  AINFO << "Defined bicycle on lane obstacle predictor ["
+        << vehicle_on_lane_predictor_ << "].";
+  AINFO << "Defined bicycle off lane obstacle predictor ["
         << vehicle_off_lane_predictor_ << "].";
   AINFO << "Defined pedestrian obstacle predictor [" << pedestrian_predictor_
         << "].";
@@ -91,9 +98,19 @@ void PredictorManager::Run(const PerceptionObstacles& perception_obstacles) {
   Predictor* predictor = nullptr;
   for (const auto& perception_obstacle :
        perception_obstacles.perception_obstacle()) {
+    if (!perception_obstacle.has_id()) {
+      AERROR << "A perception obstacle has no id.";
+      continue;
+    }
+
+    int id = perception_obstacle.id();
+    if (id < 0) {
+      AERROR << "A perception obstacle has invalid id [" << id << "].";
+      continue;
+    }
+
     PredictionObstacle prediction_obstacle;
     prediction_obstacle.set_timestamp(perception_obstacle.timestamp());
-    int id = perception_obstacle.id();
     Obstacle* obstacle = container->GetObstacle(id);
     if (obstacle != nullptr) {
       switch (perception_obstacle.type()) {
@@ -107,6 +124,14 @@ void PredictorManager::Run(const PerceptionObstacles& perception_obstacles) {
         }
         case PerceptionObstacle::PEDESTRIAN: {
           predictor = GetPredictor(pedestrian_predictor_);
+          break;
+        }
+        case PerceptionObstacle::BICYCLE: {
+          if (obstacle->IsOnLane() && !obstacle->IsNearJunction()) {
+            predictor = GetPredictor(cyclist_on_lane_predictor_);
+          } else {
+            predictor = GetPredictor(cyclist_off_lane_predictor_);
+          }
           break;
         }
         default: {
@@ -145,6 +170,10 @@ std::unique_ptr<Predictor> PredictorManager::CreatePredictor(
   switch (type) {
     case ObstacleConf::LANE_SEQUENCE_PREDICTOR: {
       predictor_ptr.reset(new LaneSequencePredictor());
+      break;
+    }
+    case ObstacleConf::MOVE_SEQUENCE_PREDICTOR: {
+      predictor_ptr.reset(new MoveSequencePredictor());
       break;
     }
     case ObstacleConf::FREE_MOVE_PREDICTOR: {

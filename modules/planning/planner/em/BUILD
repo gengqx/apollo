@@ -3,27 +3,6 @@ load("//tools:cpplint.bzl", "cpplint")
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "decider",
-    srcs = [
-        "decider.cc",
-    ],
-    hdrs = [
-        "decider.h",
-    ],
-    deps = [
-        "//external:gflags",
-        "//modules/common:log",
-        "//modules/common/configs:vehicle_config_helper",
-        "//modules/common/status",
-        "//modules/common/vehicle_state",
-        "//modules/planning/common:planning_common",
-        "//modules/planning/proto:planning_proto",
-        "//modules/planning/reference_line",
-        "@eigen//:eigen",
-    ],
-)
-
-cc_library(
     name = "em_planner",
     srcs = [
         "em_planner.cc",
@@ -32,7 +11,6 @@ cc_library(
         "em_planner.h",
     ],
     deps = [
-        ":decider",
         "//external:gflags",
         "//modules/common:log",
         "//modules/common/proto:pnc_point_proto",
@@ -40,7 +18,7 @@ cc_library(
         "//modules/common/time",
         "//modules/common/util",
         "//modules/common/util:factory",
-        "//modules/common/vehicle_state",
+        "//modules/common/vehicle_state:vehicle_state_provider",
         "//modules/map/hdmap",
         "//modules/planning/common:planning_common",
         "//modules/planning/constraint_checker",
@@ -48,7 +26,7 @@ cc_library(
         "//modules/planning/planner",
         "//modules/planning/proto:planning_proto",
         "//modules/planning/reference_line",
-        "//modules/planning/reference_line:reference_line_smoother",
+        "//modules/planning/reference_line:qp_spline_reference_line_smoother",
         "//modules/planning/tasks:path_optimizer",
         "//modules/planning/tasks:speed_optimizer",
         "//modules/planning/tasks:task",
@@ -57,6 +35,7 @@ cc_library(
         "//modules/planning/tasks/path_decider",
         "//modules/planning/tasks/qp_spline_path",
         "//modules/planning/tasks/qp_spline_st_speed:qp_spline_st_speed_optimizer",
+        "//modules/planning/tasks/speed_decider",
         "//modules/planning/tasks/traffic_decider",
         "@eigen//:eigen",
     ],

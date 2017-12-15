@@ -10,12 +10,14 @@ cc_proto_library(
 proto_library(
     name = "routing_proto_lib",
     srcs = [
+        "poi.proto",
         "routing.proto",
         "routing_config.proto",
         "topo_graph.proto",
     ],
     deps = [
         "//modules/common/proto:common_proto_lib",
+        "//modules/common/proto:error_code_proto_lib",
         "//modules/common/proto:header_proto_lib",
         "//modules/map/proto:map_proto_lib",
     ],

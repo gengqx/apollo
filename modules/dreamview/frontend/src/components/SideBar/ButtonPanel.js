@@ -2,59 +2,56 @@ import React from "react";
 import { observer } from "mobx-react";
 import classNames from "classnames";
 
-@observer
+import Icon from "assets/images/sidebar/route_editing.png";
+
 class SideBarButton extends React.Component {
     render() {
-        const { onClick, active, label, extraClasses } = this.props;
+        const { disabled, onClick, active, label, extraClasses } = this.props;
         return (
             <button onClick={onClick}
+                    disabled={disabled}
                     className={classNames({
                             "button": true,
                             "active": active,
                         }, extraClasses)}>
-                {label}
+                <img src={Icon} className="icon" />
+                <div className="label">{label}</div>
             </button>
         );
     }
 }
 
-@observer
 export default class ButtonPanel extends React.Component {
-    openHMI() {
-        const server = window.location.origin;
-        const link = document.createElement("a");
-        link.href = server;
-        window.open(
-            `http://${link.hostname}:8887`, "_self");
-    }
-
     render() {
-        const { showRouteEditingBar,
-                sendDefaultRoutingRequest,
-                onConsole, showConsole,
-                onMenu, showMenu } = this.props;
+        const { enableHMIButtonsOnly,
+                onTasks, showTasks,
+                onModuleController, showModuleController,
+                onMenu, showMenu,
+                onRouteEditingBar, showRouteEditingBar,
+                onPOI, showPOI } = this.props;
 
         return (
             <div>
-                <SideBarButton label="HMI Setup" active={false}
-                               onClick={this.openHMI.bind(this)}
-                               extraClasses={["button-corner"]} />
-                <div className="separator" />
-                <SideBarButton label="Default Routing"
-                               onClick={sendDefaultRoutingRequest}
-                               active={false} />
-                <div className="separator" />
-                <SideBarButton label="Route Editing"
-                               onClick={showRouteEditingBar}
-                               active={false} />
-                <div className="separator" />
-                <SideBarButton label="Notifications"
-                               onClick={onConsole}
-                               active={showConsole} />
-                <div className="separator" />
+                <SideBarButton label="Tasks"
+                               disabled={false}
+                               onClick={onTasks}
+                               active={showTasks}/>
+                <SideBarButton label="Module Controller"
+                               disabled={false}
+                               onClick={onModuleController}
+                               active={showModuleController}/>
                 <SideBarButton label="Layer Menu"
+                               disabled={enableHMIButtonsOnly}
                                onClick={onMenu}
                                active={showMenu} />
+                <SideBarButton label="Route Editing"
+                               disabled={enableHMIButtonsOnly}
+                               onClick={onRouteEditingBar}
+                               active={showRouteEditingBar} />
+                <SideBarButton label="Default Routing"
+                               disabled={enableHMIButtonsOnly}
+                               onClick={onPOI}
+                               active={showPOI} />
             </div>
         );
     }

@@ -27,7 +27,7 @@
 
 #include "modules/common/adapters/adapter_manager.h"
 #include "modules/common/configs/vehicle_config_helper.h"
-#include "modules/common/vehicle_state/vehicle_state.h"
+#include "modules/common/vehicle_state/vehicle_state_provider.h"
 #include "modules/planning/common/planning_gflags.h"
 #include "modules/planning/tasks/dp_st_speed/dp_st_graph.h"
 #include "modules/planning/tasks/st_graph/st_graph_data.h"
@@ -56,6 +56,7 @@ Status DpStSpeedOptimizer::Process(const SLBoundary& adc_sl_boundary,
                                    const PathData& path_data,
                                    const common::TrajectoryPoint& init_point,
                                    const ReferenceLine& reference_line,
+                                   const SpeedData& reference_speed_data,
                                    PathDecision* const path_decision,
                                    SpeedData* const speed_data) {
   if (!is_init_) {
@@ -69,19 +70,25 @@ Status DpStSpeedOptimizer::Process(const SLBoundary& adc_sl_boundary,
     return Status(ErrorCode::PLANNING_ERROR, msg);
   }
 
-  StBoundaryMapper boundary_mapper(
-      reference_line_info_->pnc_map(), adc_sl_boundary, st_boundary_config_,
-      reference_line, path_data, dp_st_speed_config_.total_path_length(),
-      dp_st_speed_config_.total_time());
+  StBoundaryMapper boundary_mapper(adc_sl_boundary, st_boundary_config_,
+                                   reference_line, path_data,
+                                   dp_st_speed_config_.total_path_length(),
+                                   dp_st_speed_config_.total_time());
 
   // step 1 get boundaries
-  std::vector<StBoundary> boundaries;
-  if (boundary_mapper.GetGraphBoundary(*path_decision, &boundaries).code() ==
+  path_decision->EraseStBoundaries();
+  if (boundary_mapper.GetGraphBoundary(path_decision).code() ==
       ErrorCode::PLANNING_ERROR) {
     const std::string msg =
         "Mapping obstacle for dp st speed optimizer failed.";
     AERROR << msg;
     return Status(ErrorCode::PLANNING_ERROR, msg);
+  }
+  std::vector<const StBoundary*> boundaries;
+  for (const auto* obstacle : path_decision->path_obstacles().Items()) {
+    if (!obstacle->st_boundary().IsEmpty()) {
+      boundaries.push_back(&obstacle->st_boundary());
+    }
   }
 
   // step 2 perform graph search
@@ -98,18 +105,18 @@ Status DpStSpeedOptimizer::Process(const SLBoundary& adc_sl_boundary,
 
   DpStGraph st_graph(reference_line, st_graph_data, dp_st_speed_config_,
                      path_data, adc_sl_boundary);
-  auto* debug = frame_->DebugLogger();
+  auto* debug = reference_line_info_->mutable_debug();
   STGraphDebug* st_graph_debug = debug->mutable_planning_data()->add_st_graph();
 
   if (!st_graph.Search(path_decision, speed_data).ok()) {
     const std::string msg(Name() +
                           ":Failed to search graph with dynamic programming.");
     AERROR << msg;
-    RecordSTGraphDebug(boundaries, speed_limit, *speed_data, st_graph_debug);
+    RecordSTGraphDebug(st_graph_data, st_graph_debug);
     return Status(ErrorCode::PLANNING_ERROR, msg);
   }
 
-  RecordSTGraphDebug(boundaries, speed_limit, *speed_data, st_graph_debug);
+  RecordSTGraphDebug(st_graph_data, st_graph_debug);
 
   return Status::OK();
 }

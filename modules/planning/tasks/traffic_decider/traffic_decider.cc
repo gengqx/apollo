@@ -22,7 +22,11 @@
 
 #include "modules/common/configs/vehicle_config_helper.h"
 #include "modules/planning/common/planning_gflags.h"
-#include "modules/planning/tasks/traffic_decider/back_side_vehicles.h"
+#include "modules/planning/tasks/traffic_decider/backside_vehicle.h"
+#include "modules/planning/tasks/traffic_decider/crosswalk.h"
+#include "modules/planning/tasks/traffic_decider/reference_line_end.h"
+#include "modules/planning/tasks/traffic_decider/rerouting.h"
+#include "modules/planning/tasks/traffic_decider/signal_light.h"
 
 namespace apollo {
 namespace planning {
@@ -32,9 +36,27 @@ using common::VehicleConfigHelper;
 TrafficDecider::TrafficDecider() : Task("TrafficDecider") {}
 
 void TrafficDecider::RegisterRules() {
-  rule_factory_.Register("BackSideVehicles", []() -> TrafficRule * {
-    return new BackSideVehicles();
-  });
+  rule_factory_.Register(RuleConfig::BACKSIDE_VEHICLE,
+                         [](const RuleConfig &config) -> TrafficRule * {
+                           return new BacksideVehicle(config);
+                         });
+  rule_factory_.Register(RuleConfig::SIGNAL_LIGHT,
+                         [](const RuleConfig &config) -> TrafficRule * {
+                           return new SignalLight(config);
+                         });
+
+  rule_factory_.Register(RuleConfig::CROSSWALK,
+                         [](const RuleConfig &config) -> TrafficRule * {
+                           return new Crosswalk(config);
+                         });
+  rule_factory_.Register(RuleConfig::REROUTING,
+                         [](const RuleConfig &config) -> TrafficRule * {
+                           return new Rerouting(config);
+                         });
+  rule_factory_.Register(RuleConfig::REFERENCE_LINE_END,
+                         [](const RuleConfig &config) -> TrafficRule * {
+                           return new ReferenceLineEnd(config);
+                         });
 }
 
 bool TrafficDecider::Init(const PlanningConfig &config) {
@@ -48,14 +70,19 @@ Status TrafficDecider::Execute(Frame *frame,
                                ReferenceLineInfo *reference_line_info) {
   Task::Execute(frame, reference_line_info);
 
-  for (const auto rule_config : rule_configs_) {
-    auto rule = rule_factory_.CreateObject(rule_config.name());
+  for (const auto &rule_config : rule_configs_) {
+    if (!FLAGS_enable_traffic_light &&
+        rule_config.rule_id() == RuleConfig::SIGNAL_LIGHT) {
+      AWARN << "Traffic light is disabled, enable by --enable_traffic_light";
+      continue;
+    }
+    auto rule = rule_factory_.CreateObject(rule_config.rule_id(), rule_config);
     if (!rule) {
       AERROR << "Could not find rule " << rule_config.DebugString();
       continue;
     }
-    rule->ApplyRule(reference_line_info);
-    ADEBUG << "Applied rule " << rule_config.name();
+    rule->ApplyRule(frame, reference_line_info);
+    ADEBUG << "Applied rule " << RuleConfig::RuleId_Name(rule_config.rule_id());
   }
   return Status::OK();
 }

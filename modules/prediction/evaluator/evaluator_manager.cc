@@ -20,18 +20,20 @@
 #include "modules/prediction/container/container_manager.h"
 #include "modules/prediction/container/obstacles/obstacles_container.h"
 #include "modules/prediction/evaluator/vehicle/mlp_evaluator.h"
+#include "modules/prediction/evaluator/vehicle/rnn_evaluator.h"
 
 namespace apollo {
 namespace prediction {
 
-using apollo::perception::PerceptionObstacles;
-using apollo::perception::PerceptionObstacle;
 using apollo::common::adapter::AdapterConfig;
+using apollo::perception::PerceptionObstacle;
+using apollo::perception::PerceptionObstacles;
 
 EvaluatorManager::EvaluatorManager() { RegisterEvaluators(); }
 
 void EvaluatorManager::RegisterEvaluators() {
   RegisterEvaluator(ObstacleConf::MLP_EVALUATOR);
+  RegisterEvaluator(ObstacleConf::RNN_EVALUATOR);
 }
 
 void EvaluatorManager::Init(const PredictionConf& config) {
@@ -75,7 +77,16 @@ void EvaluatorManager::Run(
   Evaluator* evaluator = nullptr;
   for (const auto& perception_obstacle :
        perception_obstacles.perception_obstacle()) {
+    if (!perception_obstacle.has_id()) {
+      AERROR << "A perception obstacle has no id.";
+      continue;
+    }
+
     int id = perception_obstacle.id();
+    if (id < 0) {
+      AERROR << "A perception obstacle has invalid id [" << id << "].";
+      continue;
+    }
     Obstacle* obstacle = container->GetObstacle(id);
 
     if (obstacle == nullptr) {
@@ -110,6 +121,10 @@ std::unique_ptr<Evaluator> EvaluatorManager::CreateEvaluator(
   switch (type) {
     case ObstacleConf::MLP_EVALUATOR: {
       evaluator_ptr.reset(new MLPEvaluator());
+      break;
+    }
+    case ObstacleConf::RNN_EVALUATOR: {
+      evaluator_ptr.reset(new RNNEvaluator());
       break;
     }
     default: { break; }

@@ -98,6 +98,29 @@ TEST_F(FileTest, RemoveAllFiles) {
   EXPECT_FALSE(GetProtoFromASCIIFile(path2, &message));
 }
 
+TEST_F(FileTest, ListSubDirectories) {
+  // Expect {'modules/common/util/testdata'}
+  const auto root_subdirs = ListSubDirectories("/");
+
+  // Some common root subdirs should exist.
+  EXPECT_NE(root_subdirs.end(),
+            std::find(root_subdirs.begin(), root_subdirs.end(), "home"));
+  EXPECT_NE(root_subdirs.end(),
+            std::find(root_subdirs.begin(), root_subdirs.end(), "root"));
+  // Something shouldn't exist.
+  EXPECT_EQ(root_subdirs.end(),
+            std::find(root_subdirs.begin(), root_subdirs.end(), "impossible"));
+}
+
+TEST_F(FileTest, GetAbsolutePath) {
+  EXPECT_EQ("./xx.txt", GetAbsolutePath("", "./xx.txt"));
+  EXPECT_EQ("/abc", GetAbsolutePath("/abc", ""));
+  EXPECT_EQ("/home/work/xx.txt", GetAbsolutePath("/home/work", "xx.txt"));
+  EXPECT_EQ("/home/work/xx.txt", GetAbsolutePath("/home/work/", "xx.txt"));
+  EXPECT_EQ("/xx.txt", GetAbsolutePath("/home/work", "/xx.txt"));
+  EXPECT_EQ("/home/work/./xx.txt", GetAbsolutePath("/home/work", "./xx.txt"));
+}
+
 }  // namespace util
 }  // namespace common
 }  // namespace apollo

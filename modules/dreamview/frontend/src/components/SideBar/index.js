@@ -2,34 +2,36 @@ import React from "react";
 import { inject, observer } from "mobx-react";
 
 import ButtonPanel from "components/SideBar/ButtonPanel";
-import Menu from "components/SideBar/Menu";
-import Console from "components/SideBar/Console";
-import Notification from "components/SideBar/Notification";
+import WS from "store/websocket";
 
 @inject("store") @observer
 export default class SideBar extends React.Component {
     render() {
-        const { monitor, options, routeEditingManager } = this.props.store;
+        const { options, enableHMIButtonsOnly } = this.props.store;
 
         return (
-            <div className="sidebar">
-                <ButtonPanel showRouteEditingBar={() => {
-                                     routeEditingManager.enableRouteEditing();
-                                 }}
-                             sendDefaultRoutingRequest={() => {
-                                     routeEditingManager.sendRoutingRequest(true);
+            <div className="side-bar">
+                <ButtonPanel enableHMIButtonsOnly={enableHMIButtonsOnly}
+                             onTasks={() => {
+                                this.props.store.handleSideBarClick('showTasks');
+                             }}
+                             showTasks={options.showTasks}
+                             onModuleController={() => {
+                                this.props.store.handleSideBarClick('showModuleController');
+                             }}
+                             showModuleController={options.showModuleController}
+                             onMenu={() => {
+                                    this.props.store.handleSideBarClick('showMenu');
                                  }}
                              showMenu={options.showMenu}
-                             onMenu={() => {
-                                     options.toggleShowMenu();
+                             onRouteEditingBar={() => {
+                                    this.props.store.handleSideBarClick('showRouteEditingBar');
                                  }}
-                             showConsole={options.showConsole}
-                             onConsole={() => {
-                                     options.toggleShowConsole();
-                                 }}/>
-                {options.showMenu ? <Menu options={options} /> : <div/>}
-                {options.showConsole ? <Console monitor={monitor} /> :
-                 <Notification monitor={monitor} />}
+                             showRouteEditingBar={options.showRouteEditingBar}
+                             onPOI={() => {
+                                 this.props.store.handleSideBarClick('showPOI');
+                             }}
+                             showPOI={options.showPOI} />
             </div>
         );
     }

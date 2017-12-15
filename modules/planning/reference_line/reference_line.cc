@@ -33,20 +33,23 @@
 #include "modules/common/math/linear_interpolation.h"
 #include "modules/common/math/vec2d.h"
 #include "modules/common/util/string_util.h"
+#include "modules/common/util/util.h"
 #include "modules/planning/common/planning_gflags.h"
-#include "modules/planning/math/double.h"
 
 namespace apollo {
 namespace planning {
 
 using MapPath = hdmap::Path;
 using apollo::common::SLPoint;
+using apollo::hdmap::InterpolatedIndex;
 
 ReferenceLine::ReferenceLine(
     const std::vector<ReferencePoint>& reference_points)
     : reference_points_(reference_points),
       map_path_(MapPath(std::vector<hdmap::MapPathPoint>(
-          reference_points.begin(), reference_points.end()))) {}
+          reference_points.begin(), reference_points.end()))) {
+  CHECK_EQ(map_path_.num_points(), reference_points_.size());
+}
 
 ReferenceLine::ReferenceLine(const MapPath& hdmap_path)
     : map_path_(hdmap_path) {
@@ -57,54 +60,156 @@ ReferenceLine::ReferenceLine(const MapPath& hdmap_path)
         hdmap::MapPathPoint(point, point.heading(), lane_waypoint), 0.0, 0.0,
         0.0, 0.0);
   }
+  CHECK_EQ(map_path_.num_points(), reference_points_.size());
 }
 
-ReferenceLine::ReferenceLine(
-    const std::vector<ReferencePoint>& reference_points,
-    const std::vector<hdmap::LaneSegment>& lane_segments,
-    const double max_approximation_error)
-    : reference_points_(reference_points),
-      map_path_(MapPath(std::vector<hdmap::MapPathPoint>(
-                            reference_points.begin(), reference_points.end()),
-                        lane_segments, max_approximation_error)) {}
+bool ReferenceLine::Stitch(const ReferenceLine& other) {
+  if (other.reference_points().empty()) {
+    AWARN << "The other reference line is empty";
+    return true;
+  }
+  auto first_point = reference_points_.front();
+  common::SLPoint first_sl;
+  if (!other.XYToSL(first_point, &first_sl)) {
+    return false;
+  }
+  constexpr double kStitchingError = 2e-2;
+  bool first_join = first_sl.s() > 0 && first_sl.s() < other.Length() &&
+                    std::fabs(first_sl.l()) < kStitchingError;
+  auto last_point = reference_points_.back();
+  common::SLPoint last_sl;
+  if (!other.XYToSL(last_point, &last_sl)) {
+    return false;
+  }
+  bool last_join = last_sl.s() > 0 && last_sl.s() < other.Length() &&
+                   std::fabs(last_sl.l()) < kStitchingError;
+  const auto& other_points = other.reference_points();
+  if (!first_join && !last_join) {
+    common::SLPoint other_first;
+    if (!XYToSL(other_points.front(), &other_first)) {
+      AERROR << "Could not project point : "
+             << other_points.front().DebugString();
+      return false;
+    }
+    bool other_on_current = other_first.s() >= 0 &&
+                            other_first.s() < Length() &&
+                            std::fabs(other_first.l()) < kStitchingError;
+    if (other_on_current) {
+      return true;
+    } else {
+      AERROR << "These reference lines are not connected";
+      return false;
+    }
+    return false;
+  }
+  const auto& accumulated_s = other.map_path().accumulated_s();
+  auto lower = accumulated_s.begin();
+  if (first_join) {
+    lower = std::lower_bound(accumulated_s.begin(), accumulated_s.end(),
+                             first_sl.s());
+    std::size_t start_i = std::distance(accumulated_s.begin(), lower);
+    reference_points_.insert(reference_points_.begin(), other_points.begin(),
+                             other_points.begin() + start_i);
+  }
+  if (last_join) {
+    auto upper = std::upper_bound(lower, accumulated_s.end(), last_sl.s());
+    auto end_i = std::distance(accumulated_s.begin(), upper);
+    reference_points_.insert(reference_points_.end(),
+                             other_points.begin() + end_i, other_points.end());
+  }
+  map_path_ = MapPath(std::vector<hdmap::MapPathPoint>(
+      reference_points_.begin(), reference_points_.end()));
+  return true;
+}
 
-ReferencePoint ReferenceLine::GetReferencePoint(const double s) const {
+bool ReferenceLine::Shrink(const common::math::Vec2d& point,
+                           double look_backward, double look_forward) {
+  common::SLPoint sl;
+  if (!XYToSL(point, &sl)) {
+    AERROR << "Failed to project point: " << point.DebugString();
+    return false;
+  }
   const auto& accumulated_s = map_path_.accumulated_s();
-  if (s < accumulated_s.front()) {
-    AWARN << "The requested s is before the start point of the reference "
-             "line; reference line starts at "
-          << accumulated_s.front() << ", requested " << s << ".";
-    ReferencePoint ref_point(map_path_.GetSmoothPoint(s), 0.0, 0.0, 0.0, 0.0);
-    if (ref_point.lane_waypoints().empty()) {
-      ref_point.add_lane_waypoints(reference_points_.front().lane_waypoints());
-    }
-    return ref_point;
+  size_t start_index = 0;
+  if (sl.s() > look_backward) {
+    auto it_lower = std::lower_bound(accumulated_s.begin(), accumulated_s.end(),
+                                     sl.s() - look_backward);
+    start_index = std::distance(accumulated_s.begin(), it_lower);
   }
-  if (s > accumulated_s.back()) {
-    AWARN << "The requested s exceeds the reference line; reference line "
-             "ends at "
-          << accumulated_s.back() << "requested " << s << " .";
-    ReferencePoint ref_point(map_path_.GetSmoothPoint(s), 0.0, 0.0, 0.0, 0.0);
-    if (ref_point.lane_waypoints().empty()) {
-      ref_point.add_lane_waypoints(reference_points_.back().lane_waypoints());
-    }
-    return ref_point;
+  size_t end_index = reference_points_.size();
+  if (sl.s() + look_forward < Length()) {
+    auto start_it = accumulated_s.begin();
+    std::advance(start_it, start_index);
+    auto it_higher =
+        std::upper_bound(start_it, accumulated_s.end(), sl.s() + look_forward);
+    end_index = std::distance(accumulated_s.begin(), it_higher);
   }
+  reference_points_.erase(reference_points_.begin() + end_index,
+                          reference_points_.end());
+  reference_points_.erase(reference_points_.begin(),
+                          reference_points_.begin() + start_index);
+  if (reference_points_.size() < 2) {
+    AERROR << "Too few reference points after shrinking.";
+    return false;
+  }
+  map_path_ = MapPath(std::vector<hdmap::MapPathPoint>(
+      reference_points_.begin(), reference_points_.end()));
+  return true;
+}
 
+ReferencePoint ReferenceLine::GetNearestReferencepoint(const double s) const {
+  const auto& accumulated_s = map_path_.accumulated_s();
+  if (s < accumulated_s.front() - 1e-2) {
+    AWARN << "The requested s " << s << " < 0";
+    return reference_points_.front();
+  }
+  if (s > accumulated_s.back() + 1e-2) {
+    AWARN << "The requested s " << s << " > reference line length "
+          << accumulated_s.back();
+    return reference_points_.back();
+  }
   auto it_lower =
       std::lower_bound(accumulated_s.begin(), accumulated_s.end(), s);
   if (it_lower == accumulated_s.begin()) {
     return reference_points_.front();
   } else {
     auto index = std::distance(accumulated_s.begin(), it_lower);
-    const auto& p0 = reference_points_[index - 1];
-    const auto& p1 = reference_points_[index];
-
-    const double s0 = accumulated_s[index - 1];
-    const double s1 = accumulated_s[index];
-
-    return Interpolate(p0, s0, p1, s1, s);
+    if (std::fabs(accumulated_s[index - 1] - s) <
+        std::fabs(accumulated_s[index] - s)) {
+      return reference_points_[index - 1];
+    } else {
+      return reference_points_[index];
+    }
   }
+}
+
+ReferencePoint ReferenceLine::GetReferencePoint(const double s) const {
+  const auto& accumulated_s = map_path_.accumulated_s();
+  if (s < accumulated_s.front() - 1e-2) {
+    AWARN << "The requested s " << s << " < 0";
+    return reference_points_.front();
+  }
+  if (s > accumulated_s.back() + 1e-2) {
+    AWARN << "The requested s " << s << " > reference line length "
+          << accumulated_s.back();
+    return reference_points_.back();
+  }
+
+  auto interpolate_index = map_path_.GetIndexFromS(s);
+  ADEBUG << interpolate_index.id << ", " << interpolate_index.offset;
+
+  uint32_t index = interpolate_index.id;
+  uint32_t next_index = index + 1;
+  if (next_index >= reference_points_.size()) {
+    next_index = reference_points_.size() - 1;
+  }
+
+  const auto& p0 = reference_points_[index];
+  const auto& p1 = reference_points_[next_index];
+
+  const double s0 = accumulated_s[index];
+  const double s1 = accumulated_s[next_index];
+  return InterpolateWithMatchedIndex(p0, s0, p1, s1, interpolate_index);
 }
 
 double ReferenceLine::FindMinDistancePoint(const ReferencePoint& p0,
@@ -182,16 +287,39 @@ bool ReferenceLine::SLToXY(const SLPoint& sl_point,
 bool ReferenceLine::XYToSL(const common::math::Vec2d& xy_point,
                            SLPoint* const sl_point) const {
   DCHECK_NOTNULL(sl_point);
-  double s = 0;
-  double l = 0;
+  double s = 0.0;
+  double l = 0.0;
   if (!map_path_.GetProjection(xy_point, &s, &l)) {
     AERROR << "Can't get nearest point from path.";
     return false;
   }
-
   sl_point->set_s(s);
   sl_point->set_l(l);
   return true;
+}
+
+ReferencePoint ReferenceLine::InterpolateWithMatchedIndex(
+    const ReferencePoint& p0, const double s0, const ReferencePoint& p1,
+    const double s1, const InterpolatedIndex& index) const {
+  if (std::fabs(s0 - s1) < common::math::kMathEpsilon) {
+    return p0;
+  }
+  double s = s0 + index.offset;
+  DCHECK_LE(s0 - 1.0e-6, s) << " s: " << s << " is less than s0 :" << s0;
+  DCHECK_LE(s, s1 + 1.0e-6) << "s: " << s << " is larger than s1: " << s1;
+  CHECK(!p0.lane_waypoints().empty());
+  CHECK(!p1.lane_waypoints().empty());
+
+  auto map_path_point = map_path_.GetSmoothPoint(index);
+  double upper_bound = 0.0;
+  double lower_bound = 0.0;
+  map_path_.GetWidth(s, &upper_bound, &lower_bound);
+
+  const double kappa = common::math::lerp(p0.kappa(), s0, p1.kappa(), s1, s);
+  const double dkappa = common::math::lerp(p0.dkappa(), s0, p1.dkappa(), s1, s);
+
+  return ReferencePoint(map_path_point, kappa, dkappa, lower_bound,
+                        upper_bound);
 }
 
 ReferencePoint ReferenceLine::Interpolate(const ReferencePoint& p0,
@@ -202,7 +330,7 @@ ReferencePoint ReferenceLine::Interpolate(const ReferencePoint& p0,
     return p0;
   }
   DCHECK_LE(s0 - 1.0e-6, s) << " s: " << s << " is less than s0 :" << s0;
-  DCHECK_LE(s, s1 + 1.0e-6) << "s: " << s << "is larger than s1: " << s1;
+  DCHECK_LE(s, s1 + 1.0e-6) << "s: " << s << " is larger than s1: " << s1;
 
   CHECK(!p0.lane_waypoints().empty());
   CHECK(!p1.lane_waypoints().empty());
@@ -246,6 +374,19 @@ const MapPath& ReferenceLine::map_path() const { return map_path_; }
 bool ReferenceLine::GetLaneWidth(const double s, double* const left_width,
                                  double* const right_width) const {
   return map_path_.GetWidth(s, left_width, right_width);
+}
+
+bool ReferenceLine::IsOnRoad(const common::math::Vec2d& vec2d_point) const {
+  common::SLPoint sl_point;
+  if (!XYToSL(vec2d_point, &sl_point)) {
+    return false;
+  }
+  return IsOnRoad(sl_point);
+}
+
+bool ReferenceLine::IsBlockRoad(const common::math::Box2d& box2d,
+                                double gap) const {
+  return map_path_.OverlapWith(box2d, gap);
 }
 
 bool ReferenceLine::IsOnRoad(const SLPoint& sl_point) const {

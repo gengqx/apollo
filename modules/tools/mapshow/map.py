@@ -46,6 +46,25 @@ class Map:
         res = proto_utils.get_pb_from_file(map_file_name, self.map_pb)
         return res != None
 
+    def draw_roads(self, ax):
+        cnt = 1
+        for road in self.map_pb.road:
+            color_val = self.colors[cnt % len(self.colors)]
+            self.draw_road(ax, road, color_val)
+            cnt += 1
+
+    def draw_road(self, ax, road, color_val):
+        for section in road.section:
+            for edge in section.boundary.outer_polygon.edge:
+                for segment in edge.curve.segment:
+                    if segment.HasField('line_segment'):
+                        px = []
+                        py = []
+                        for p in segment.line_segment.point:
+                            px.append(float(p.x))
+                            py.append(float(p.y))
+                        ax.plot(px, py, ls='-', c=color_val, alpha = 0.5)
+
     def draw_lanes(self, ax, is_show_lane_ids, laneids):
         cnt = 1
         for lane in  self.map_pb.lane:
@@ -142,3 +161,29 @@ class Map:
                     px.append(float(p.x))
                     py.append(float(p.y))
                 ax.plot(px, py, ls=':', c=color_val, alpha = 0.5)
+
+    def draw_signal_lights(self, ax):
+        """draw_signal_lights"""
+        for signal in self.map_pb.signal:
+            for stop_line in signal.stop_line:
+                for curve in stop_line.segment:
+                    self._draw_signal(curve.line_segment, signal.id.id, ax)
+
+    @staticmethod
+    def _draw_signal(line_segment, label, ax):
+        """draw a signal"""
+        px = []
+        py = []
+        for p in line_segment.point:
+            px.append(float(p.x))
+            py.append(float(p.y))
+        ax.plot(px, py, 'o-')
+        lxy = [random.randint(20, 80) * random.sample([-1, 1], 1)[0],
+               random.randint(20, 80) * random.sample([-1, 1], 1)[0]]
+        xy = (sum(px)/len(px), sum(py)/len(py))
+        plt.annotate(
+            label,
+            xy = xy, xytext = lxy,
+            textcoords = 'offset points',
+            bbox = dict(boxstyle = 'round,pad=0.5', fc = 'yellow', alpha = 0.5),
+            arrowprops = dict(arrowstyle = '->', connectionstyle = 'arc3,rad=0'))

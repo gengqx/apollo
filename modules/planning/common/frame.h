@@ -24,78 +24,63 @@
 #include <cstdint>
 #include <list>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <vector>
 
 #include "modules/common/proto/geometry.pb.h"
+#include "modules/common/proto/vehicle_state.pb.h"
 #include "modules/localization/proto/pose.pb.h"
-#include "modules/planning/proto/reference_line_smoother_config.pb.h"
+#include "modules/planning/proto/planning.pb.h"
+#include "modules/planning/proto/planning_config.pb.h"
+#include "modules/planning/proto/planning_internal.pb.h"
 #include "modules/prediction/proto/prediction_obstacle.pb.h"
 #include "modules/routing/proto/routing.pb.h"
 
 #include "modules/common/status/status.h"
-#include "modules/map/pnc_map/pnc_map.h"
+#include "modules/planning/common/change_lane_decider.h"
 #include "modules/planning/common/indexed_queue.h"
 #include "modules/planning/common/obstacle.h"
 #include "modules/planning/common/reference_line_info.h"
 #include "modules/planning/common/trajectory/publishable_trajectory.h"
-#include "modules/planning/proto/planning.pb.h"
-#include "modules/planning/proto/planning_config.pb.h"
-#include "modules/planning/proto/planning_internal.pb.h"
 
 namespace apollo {
 namespace planning {
 
 class Frame {
  public:
-  explicit Frame(const uint32_t sequence_num);
+  explicit Frame(uint32_t sequence_num,
+                 const common::TrajectoryPoint &planning_start_point,
+                 const common::VehicleState &vehicle_state);
 
-  // functions called out of optimizers
-  void SetRoutingResponse(const routing::RoutingResponse &routing);
   void SetPrediction(const prediction::PredictionObstacles &prediction);
-  void SetPlanningStartPoint(const common::TrajectoryPoint &start_point);
-  void SetVehicleInitPose(const localization::Pose &pose);
   const common::TrajectoryPoint &PlanningStartPoint() const;
-  common::Status Init(const PlanningConfig &config,
-                      const double current_time_stamp);
-
-  static void SetMap(hdmap::PncMap *pnc_map);
+  common::Status Init();
 
   uint32_t SequenceNum() const;
 
   std::string DebugString() const;
 
-  ADCTrajectory *MutableADCTrajectory();
-
-  planning_internal::Debug *DebugLogger();
-
   const PublishableTrajectory &ComputedTrajectory() const;
 
-  const routing::RoutingResponse &routing_response() const;
-
-  void RecordInputDebug();
+  void RecordInputDebug(planning_internal::Debug *debug);
 
   std::list<ReferenceLineInfo> &reference_line_info();
 
   void AddObstacle(const Obstacle &obstacle);
 
   const ReferenceLineInfo *FindDriveReferenceLineInfo();
-  const ReferenceLineInfo *DriveReferenceLinfInfo() const;
+  const ReferenceLineInfo *DriveReferenceLineInfo() const;
+
+  const std::vector<const Obstacle *> obstacles() const;
+
+  const Obstacle *AddStaticVirtualObstacle(const std::string &id,
+                                           const common::math::Box2d &box);
+
+  bool Rerouting();
+
+  const common::VehicleState &vehicle_state() const;
 
  private:
-  /**
-   * @brief This is the function that can create one reference lines
-   * from routing result.
-   * In current implementation, only one reference line will be returned.
-   * But this is insufficient when multiple driving options exist.
-   *
-   * TODO create multiple reference_lines from this function.
-   */
-  std::vector<ReferenceLine> CreateReferenceLineFromRouting(
-      const common::PointENU &position,
-      const routing::RoutingResponse &routing);
-
   /**
    * @brief create obstacles from prediction input.
    * @param prediction the received prediction result.
@@ -103,23 +88,31 @@ class Frame {
   void CreatePredictionObstacles(
       const prediction::PredictionObstacles &prediction);
 
-  bool InitReferenceLineInfo(const std::vector<ReferenceLine> &reference_lines);
+  bool InitReferenceLineInfo();
 
   void AlignPredictionTime(const double trajectory_header_time);
 
   /**
-   * Check if there is collision with obstacles
+   * Find an obstacle that collides with ADC (Autonomous Driving Car) if such
+   * obstacle exists.
+   * @return pointer to the obstacle if such obstacle exists, otherwise
+   * @return false if no colliding obstacle.
    */
-  bool CheckCollision();
+  const Obstacle *FindCollisionObstacle() const;
 
-  const Obstacle *AddStaticVirtualObstacle(const std::string &id,
-                                           const common::math::Box2d &box);
-
-  const Obstacle *CreateDestinationObstacle();
+  /**
+   * @brief create destination obstacle when needed.
+   * @return < 0 if error happend;
+   * @return 0 if destination obstacle is created
+   * @return > 0 if destination obstacle should not be created now.
+   */
+  int CreateDestinationObstacle();
 
  private:
+  uint32_t sequence_num_ = 0;
+  const hdmap::HDMap *hdmap_ = nullptr;
   common::TrajectoryPoint planning_start_point_;
-
+  common::VehicleState vehicle_state_;
   std::list<ReferenceLineInfo> reference_line_info_;
 
   /**
@@ -127,20 +120,11 @@ class Frame {
    **/
   const ReferenceLineInfo *drive_reference_line_info_ = nullptr;
 
-  routing::RoutingResponse routing_response_;
   prediction::PredictionObstacles prediction_;
 
-  std::mutex obstacles_mutex_;
-  IndexedObstacles obstacles_;
+  ThreadSafeIndexedObstacles obstacles_;
 
-  uint32_t sequence_num_ = 0;
-  localization::Pose init_pose_;
-  static const hdmap::PncMap *pnc_map_;
-  ReferenceLineSmootherConfig smoother_config_;
-
-  ADCTrajectory trajectory_pb_;  // planning output pb
-
-  std::string collision_obstacle_id_;
+  ChangeLaneDecider change_lane_decider_;
 };
 
 class FrameHistory : public IndexedQueue<uint32_t, Frame> {

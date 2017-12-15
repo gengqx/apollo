@@ -26,23 +26,24 @@
 
 #include <string>
 
-#include "modules/common/util/file.h"
 #include "modules/common/log.h"
+#include "modules/common/util/file.h"
 #include "modules/map/hdmap/hdmap_util.h"
+#include "modules/routing/proto/poi.pb.h"
 #include "modules/routing/proto/routing.pb.h"
 
 namespace apollo {
 namespace hdmap {
 
-apollo::common::PointENU SLToXYZ(const std::string& lane_id,
-                                 const double s, const double l) {
+apollo::common::PointENU SLToXYZ(const std::string& lane_id, const double s,
+                                 const double l) {
   const auto lane_info = HDMapUtil::BaseMap().GetLaneById(MakeMapId(lane_id));
   CHECK(lane_info);
   return lane_info->GetSmoothPoint(s);
 }
 
-void XYZToSL(const apollo::common::PointENU& point,
-             std::string* lane_id, double* s, double* l) {
+void XYZToSL(const apollo::common::PointENU& point, std::string* lane_id,
+             double* s, double* l) {
   CHECK(lane_id);
   CHECK(s);
   CHECK(l);
@@ -61,44 +62,56 @@ double XYZDistance(const apollo::common::PointENU& p1,
 }
 
 void RefreshDefaultEndPoint() {
-  // Read xyz from old point.
-  apollo::routing::RoutingRequest::LaneWaypoint old_end_point;
+  apollo::routing::POI old_poi;
   CHECK(apollo::common::util::GetProtoFromASCIIFile(EndWayPointFile(),
-                                                    &old_end_point));
-  apollo::common::PointENU old_xyz;
-  old_xyz.set_x(old_end_point.pose().x());
-  old_xyz.set_y(old_end_point.pose().y());
-  old_xyz.set_z(old_end_point.pose().z());
+                                                    &old_poi));
 
-  // Get new lane info from xyz.
-  std::string new_lane;
-  double new_s;
-  double new_l;
-  XYZToSL(old_xyz, &new_lane, &new_s, &new_l);
+  apollo::routing::POI new_poi;
+  for (const auto& old_landmark : old_poi.landmark()) {
+    apollo::routing::Landmark *new_landmark = new_poi.add_landmark();
+    new_landmark->set_name(old_landmark.name());
+    AINFO << "Refreshed point of interest: " << old_landmark.name();
+    // Read xyz from old point.
+    for (const auto& old_end_point : old_landmark.waypoint()) {
+      apollo::common::PointENU old_xyz;
+      old_xyz.set_x(old_end_point.pose().x());
+      old_xyz.set_y(old_end_point.pose().y());
+      old_xyz.set_z(old_end_point.pose().z());
 
-  // Get new xyz from lane info.
-  const auto new_xyz = SLToXYZ(new_lane, new_s, new_l);
+      // Get new lane info from xyz.
+      std::string new_lane;
+      double new_s;
+      double new_l;
+      XYZToSL(old_xyz, &new_lane, &new_s, &new_l);
 
-  // Update default end way point.
-  apollo::routing::RoutingRequest::LaneWaypoint new_end_point;
-  new_end_point.set_id(new_lane);
-  new_end_point.set_s(new_s);
-  auto* pose = new_end_point.mutable_pose();
-  pose->set_x(new_xyz.x());
-  pose->set_y(new_xyz.y());
-  pose->set_z(new_xyz.z());
-  CHECK(apollo::common::util::SetProtoToASCIIFile(new_end_point,
+      // Get new xyz from lane info.
+      const auto new_xyz = SLToXYZ(new_lane, new_s, new_l);
+
+      // Update default end way point.
+      apollo::routing::LaneWaypoint new_end_point;
+      new_end_point.set_id(new_lane);
+      new_end_point.set_s(new_s);
+      auto* pose = new_end_point.mutable_pose();
+      pose->set_x(new_xyz.x());
+      pose->set_y(new_xyz.y());
+      pose->set_z(new_xyz.z());
+      *new_landmark->add_waypoint() = new_end_point;
+
+      AINFO << "\n ============ from ============ \n"
+      << old_end_point.DebugString()
+      << "\n ============ to ============ \n"
+      << new_end_point.DebugString()
+      << "XYZ distance is " << XYZDistance(old_xyz, new_xyz);
+    }
+  }
+  CHECK(apollo::common::util::SetProtoToASCIIFile(new_poi,
                                                   EndWayPointFile()));
-  AINFO << "Refreshed default end way point\n ============ from ============ \n"
-        << old_end_point.DebugString() << "\n ============ to ============ \n"
-        << new_end_point.DebugString()
-        << "XYZ distance is " << XYZDistance(old_xyz, new_xyz);
 }
 
 }  // namespace hdmap
 }  // namespace apollo
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
   FLAGS_logtostderr = true;

@@ -18,7 +18,7 @@
 
 
 addgroup --gid "$DOCKER_GRP_ID" "$DOCKER_GRP"
-adduser --disabled-password --gecos '' "$DOCKER_USER" \
+adduser --disabled-password --force-badname --gecos '' "$DOCKER_USER" \
     --uid "$DOCKER_USER_ID" --gid "$DOCKER_GRP_ID" 2>/dev/null
 usermod -aG sudo "$DOCKER_USER"
 echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
@@ -28,10 +28,25 @@ echo "ulimit -c unlimited" >> /home/${DOCKER_USER}/.bashrc
 
 chown -R ${DOCKER_USER}:${DOCKER_GRP} "/home/${DOCKER_USER}"
 
-# grant caros user to access GPS device
-if [ -e /dev/ttyUSB0 ]; then
-    sudo chmod a+rw /dev/ttyUSB0 /dev/ttyUSB1
+# setup GPS device
+if [ -e /dev/novatel0 ]; then
+  chmod a+rw /dev/novatel0
 fi
+if [ -e /dev/novatel1 ]; then
+  chmod a+rw /dev/novatel1
+fi
+if [ -e /dev/novatel2 ]; then
+  chmod a+rw /dev/novatel2
+fi
+
+# setup camera device
+if [ -e /dev/camera/obstacle ]; then
+  chmod a+rw /dev/camera/obstacle
+fi
+if [ -e /dev/camera/trafficlights ]; then
+  chmod a+rw /dev/camera/trafficlights
+fi
+
 
 if [ "$RELEASE_DOCKER" != "1" ];then
   # setup map data
@@ -39,24 +54,11 @@ if [ "$RELEASE_DOCKER" != "1" ];then
     cp -r /home/tmp/modules_data/* /apollo/modules/
     chown -R ${DOCKER_USER}:${DOCKER_GRP} "/apollo/modules"
   fi
-
-  # setup HMI config for internal maps and vehicles.
-  HMI_INTERNAL_PACTH=modules/hmi/conf/internal_config.patch
-  if [ -e /apollo/${HMI_INTERNAL_PACTH} ]; then
-    cd /apollo
-    git apply ${HMI_INTERNAL_PACTH}
-    git update-index --assume-unchanged modules/hmi/conf/config.pb.txt
-    rm ${HMI_INTERNAL_PACTH}
-  fi
-
-  # setup car specific configuration
-  if [ -e /home/tmp/esd_can ]; then
-    cp -r /home/tmp/esd_can/include /apollo/third_party/can_card_library/esd_can
-    cp -r /home/tmp/esd_can/lib /apollo/third_party/can_card_library/esd_can
-    chown -R ${DOCKER_USER}:${DOCKER_GRP} "/apollo/third_party/can_card_library/esd_can"
-  fi
-  if [ -e /home/tmp/gnss_conf ]; then
-    cp -r /home/tmp/gnss_conf/* /apollo/modules/drivers/gnss/conf/
-    chown -R ${DOCKER_USER}:${DOCKER_GRP} "/apollo/modules/drivers/gnss/conf/"
-  fi
+  # setup ros package
+  # this is a temporary solution to avoid ros package downloading.
+  ROS="/home/tmp/ros"
+  chmod a+w "${ROS}/share/velodyne/launch/start_velodyne.launch"
+  chmod a+w -R "${ROS}/share/velodyne_pointcloud/params"
+  chmod a+w "${ROS}/share/gnss_driver/launch/gnss_driver.launch"
+  chmod a+w "${ROS}/share/gnss_driver/conf/gnss_conf_mkz.txt"
 fi

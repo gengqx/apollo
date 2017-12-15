@@ -49,4 +49,35 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "cubic_polynomial_curve1d",
+    srcs = [
+        "cubic_polynomial_curve1d.cc",
+    ],
+    hdrs = [
+        "cubic_polynomial_curve1d.h",
+    ],
+    deps = [
+        ":polynomial_curve1d",
+        "//modules/common:log",
+        "//modules/common/util:string_util",
+    ],
+)
+
+cc_library(
+    name = "quintic_spiral_path",
+    srcs = [
+        "quintic_spiral_path.cc",
+    ],
+    hdrs = [
+        "quintic_spiral_path.h",
+    ],
+    deps = [
+        ":quintic_polynomial_curve1d",
+        "//modules/common:log",
+        "//modules/common/math",
+        "//modules/common/util:string_util",
+    ],
+)
+
 cpplint()

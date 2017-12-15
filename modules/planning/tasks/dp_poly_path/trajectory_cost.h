@@ -15,7 +15,7 @@
  *****************************************************************************/
 
 /**
- * @file trjactory_cost.h
+ * @file trajectory_cost.h
  **/
 
 #ifndef MODULES_PLANNING_TASKS_DP_POLY_PATH_TRAJECTORY_COST_H_
@@ -42,20 +42,44 @@ class TrajectoryCost {
                           const ReferenceLine &reference_line,
                           const std::vector<const PathObstacle *> &obstacles,
                           const common::VehicleParam &vehicle_param,
-                          const SpeedData &heuristic_speed_data);
+                          const SpeedData &heuristic_speed_data,
+                          const common::SLPoint &init_sl_point);
   double Calculate(const QuinticPolynomialCurve1d &curve, const double start_s,
-                   const double end_s) const;
+                   const double end_s, const uint32_t curr_level,
+                   const uint32_t total_level) const;
   double RiskDistanceCost(const double distance) const;
   double RegularDistanceCost(const double distance) const;
 
  private:
+  double CalculatePathCost(const QuinticPolynomialCurve1d &curve,
+                           const double start_s, const double end_s,
+                           const uint32_t curr_level,
+                           const uint32_t total_level) const;
+  double CalculateStaticObstacleCost(const QuinticPolynomialCurve1d &curve,
+                                     const double start_s,
+                                     const double end_s) const;
+  double CalculateDynamicObstacleCost(const QuinticPolynomialCurve1d &curve,
+                                      const double start_s,
+                                      const double end_s) const;
+  double GetCostBetweenObsBoxes(const common::math::Box2d &ego_box,
+                                const common::math::Box2d &obstacle_box) const;
+
+  double GetCostFromObsSL(const double adc_s, const double adc_l,
+                          const SLBoundary &obs_sl_boundary) const;
+
+  common::math::Box2d GetBoxFromSLPoint(const common::SLPoint &sl,
+                                        const double dl) const;
+
   const DpPolyPathConfig config_;
   const ReferenceLine *reference_line_ = nullptr;
   const common::VehicleParam vehicle_param_;
   SpeedData heuristic_speed_data_;
+  const common::SLPoint init_sl_point_;
   uint32_t num_of_time_stamps_ = 0;
-  std::vector<std::vector<common::math::Box2d>> obstacle_boxes_;
+  std::vector<std::vector<common::math::Box2d>> dynamic_obstacle_boxes_;
   std::vector<double> obstacle_probabilities_;
+
+  std::vector<SLBoundary> static_obstacle_sl_boundaries_;
 };
 
 }  // namespace planning

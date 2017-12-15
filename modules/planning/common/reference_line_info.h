@@ -29,8 +29,8 @@
 #include <vector>
 
 #include "modules/common/proto/pnc_point.pb.h"
+#include "modules/common/proto/vehicle_state.pb.h"
 #include "modules/planning/proto/planning.pb.h"
-#include "modules/planning/proto/reference_line_smoother_config.pb.h"
 
 #include "modules/map/pnc_map/pnc_map.h"
 #include "modules/planning/common/path/path_data.h"
@@ -43,30 +43,31 @@ namespace planning {
 
 class ReferenceLineInfo {
  public:
-  explicit ReferenceLineInfo(
-      const hdmap::PncMap* pnc_map, const ReferenceLine& reference_line,
-      const common::TrajectoryPoint& init_adc_point,
-      const ReferenceLineSmootherConfig& smoother_config);
+  explicit ReferenceLineInfo(const common::VehicleState& vehicle_state,
+                             const common::TrajectoryPoint& adc_planning_point,
+                             const ReferenceLine& reference_line,
+                             const hdmap::RouteSegments& segments);
 
   bool Init();
 
   bool AddObstacles(const std::vector<const Obstacle*>& obstacles);
   PathObstacle* AddObstacle(const Obstacle* obstacle);
 
-  // FIXME(all) this interface is temp. solution to make the code work.
-  // remove this interface when ready.
-  PathDecision* path_decision() { return &path_decision_; }
-  const PathDecision& path_decision() const { return path_decision_; }
-  const ReferenceLine& reference_line() const { return reference_line_; }
+  PathDecision* path_decision();
+  const PathDecision& path_decision() const;
+  const ReferenceLine& reference_line() const;
+  const common::TrajectoryPoint& AdcPlanningPoint() const;
 
-  // TODO(all) remove this inteface when ready.
-  void SetTrajectory(const DiscretizedTrajectory& trajectory) {
-    discretized_trajectory_ = trajectory;
-  }
+  bool ReachedDestination() const;
+
+  void SetTrajectory(const DiscretizedTrajectory& trajectory);
 
   const DiscretizedTrajectory& trajectory() const;
+  const double TrajectoryLength() const;
 
   double Cost() const { return cost_; }
+  void AddCost(double cost) { cost_ += cost; }
+  void SetCost(double cost) { cost_ = cost; }
 
   /**
    * @brief check if current reference line is started from another reference
@@ -88,28 +89,55 @@ class ReferenceLineInfo {
   SpeedData* mutable_speed_data();
   // aggregate final result together by some configuration
   bool CombinePathAndSpeedProfile(
-      const double time_resolution, const double relative_time,
+      const double relative_time, const double start_s,
       DiscretizedTrajectory* discretized_trajectory);
 
   const SLBoundary& AdcSlBoundary() const;
   std::string PathSpeedDebugString() const;
 
-  const hdmap::PncMap* pnc_map() const { return pnc_map_; }
+  /**
+   * Check if the current reference line is a change lane reference line, i.e.,
+   * ADC's current position is not on this reference line.
+   */
+  bool IsChangeLanePath() const;
+  /**
+   * Set if the vehicle can drive following this reference line
+   * A planner need to set this value to true if the reference line is OK
+   */
+  void SetDriable(bool drivable);
+  bool IsDrivable() const;
+
+  const hdmap::RouteSegments& Lanes() const;
+
+  void ExportDecision(DecisionResult* decision_result) const;
+
+  void SetRightOfWayStatus() { status_ = ADCTrajectory::PROTECTED; }
+  ADCTrajectory::RightOfWayStatus GetRightOfWayStatus() const {
+    return status_;
+  }
 
  private:
+  void ExportTurnSignal(common::VehicleSignal* signal) const;
+
   std::unique_ptr<PathObstacle> CreatePathObstacle(const Obstacle* obstacle);
   bool InitPerceptionSLBoundary(PathObstacle* path_obstacle);
 
-  const hdmap::PncMap* pnc_map_ = nullptr;
+  void MakeDecision(DecisionResult* decision_result) const;
+  int MakeMainStopDecision(DecisionResult* decision_result) const;
+  void MakeMainMissionCompleteDecision(DecisionResult* decision_result) const;
+  void MakeEStopDecision(DecisionResult* decision_result) const;
+  void SetObjectDecisions(ObjectDecisions* object_decisions) const;
+  const common::VehicleState vehicle_state_;
+  const common::TrajectoryPoint adc_planning_point_;
   const ReferenceLine reference_line_;
-  const common::TrajectoryPoint init_adc_point_;
 
   /**
    * @brief this is the number that measures the goodness of this reference
    * line. The lower the better.
-   * TODO(all): implement trajectory cost calculation
    */
   double cost_ = 0.0;
+
+  bool is_drivable_ = false;
 
   PathDecision path_decision_;
 
@@ -119,10 +147,13 @@ class ReferenceLineInfo {
   DiscretizedTrajectory discretized_trajectory_;
 
   SLBoundary adc_sl_boundary_;
-  const ReferenceLineSmootherConfig smoother_config_;
 
   planning_internal::Debug debug_;
   LatencyStats latency_stats_;
+
+  hdmap::RouteSegments lanes_;
+
+  ADCTrajectory::RightOfWayStatus status_ = ADCTrajectory::UNPROTECTED;
 
   DISALLOW_COPY_AND_ASSIGN(ReferenceLineInfo);
 };

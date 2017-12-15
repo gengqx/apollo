@@ -48,7 +48,13 @@ if [ ! -e "${DATA_DIR}/core" ]; then
 fi
 
 function main() {
-    docker pull "$IMG"
+    echo "Type 'y' or 'Y' to pull docker image from China mirror or any other key from US mirror."
+    read -t 10 -n 1 INCHINA
+    if [ "$INCHINA" == "y" ] || [ "$INCHINA" == "Y" ]; then
+        docker pull "registry.docker-cn.com/${IMG}"
+    else
+        docker pull $IMG
+    fi
 
     docker ps -a --format "{{.Names}}" | grep 'apollo_release' 1>/dev/null
     if [ $? == 0 ]; then
@@ -65,6 +71,13 @@ function main() {
     devices="${devices} $(find_device ram*)"
     devices="${devices} $(find_device loop*)"
     devices="${devices} $(find_device nvidia*)"
+    devices="${devices} $(find_device camera*)"
+    devices="${devices} -v /dev/camera/obstacle:/dev/camera/obstacle "
+    devices="${devices} -v /dev/camera/trafficlights:/dev/camera/trafficlights "
+    devices="${devices} -v /dev/novatel0:/dev/novatel0"
+    devices="${devices} -v /dev/novatel1:/dev/novatel1"
+    devices="${devices} -v /dev/novatel2:/dev/novatel2"
+
     local display=""
     if [[ -z ${DISPLAY} ]];then
         display=":0"
@@ -99,6 +112,7 @@ function main() {
         -e DOCKER_USER_ID=$USER_ID \
         -e DOCKER_GRP=$GRP \
         -e DOCKER_GRP_ID=$GRP_ID \
+        -e DOCKER_IMG=$IMG \
         -e PYTHONPATH=/apollo/lib:/apollo/ros/lib/python2.7/dist-packages \
         ${devices} \
         --add-host in_release_docker:127.0.0.1 \
@@ -113,8 +127,10 @@ function main() {
         docker exec apollo_release bash -c "chmod a+rw -R /apollo/modules/common/data"
         docker exec apollo_release bash -c "chmod a+rw -R /apollo/ros/share/gnss_driver"
         docker exec apollo_release bash -c "chmod a+rw -R /apollo/ros/share/velodyne"
+        docker exec apollo_release bash -c "chmod a+rw -R /apollo/modules/control/conf"
+        docker exec apollo_release bash -c "chmod a+rw -R /apollo/modules/perception/data/params/"
     fi
-    docker exec -u ${USER} -it apollo_release "/apollo/scripts/hmi.sh"
+    docker exec -u ${USER} -it apollo_release "/apollo/scripts/bootstrap.sh"
 }
 
 main

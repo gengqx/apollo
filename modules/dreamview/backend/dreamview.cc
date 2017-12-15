@@ -30,24 +30,42 @@
 namespace apollo {
 namespace dreamview {
 
-using apollo::common::adapter::AdapterManager;
-using apollo::common::VehicleConfigHelper;
 using apollo::common::Status;
+using apollo::common::VehicleConfigHelper;
+using apollo::common::adapter::AdapterManager;
 using apollo::common::time::Clock;
 using apollo::common::util::PathExists;
-using apollo::hdmap::SimMapFile;
 using apollo::hdmap::BaseMapFile;
 
-std::string Dreamview::Name() const { return FLAGS_dreamview_module_name; }
+std::string Dreamview::Name() const {
+  return FLAGS_dreamview_module_name;
+}
 
 Status Dreamview::Init() {
-  AdapterManager::Init(FLAGS_adapter_config_filename);
+  AdapterManager::Init(FLAGS_dreamview_adapter_config_filename);
   VehicleConfigHelper::Init();
 
-  CHECK(AdapterManager::GetChassis()) << "Chassis is not initialized.";
-  CHECK(AdapterManager::GetPlanning()) << "Planning is not initialized.";
+  // Check the expected adapters are initialized.
+  CHECK(AdapterManager::GetChassis()) << "ChassisAdapter is not initialized.";
+  CHECK(AdapterManager::GetPlanning()) << "PlanningAdapter is not initialized.";
   CHECK(AdapterManager::GetLocalization())
-      << "Localization is not initialized.";
+      << "LocalizationAdapter is not initialized.";
+  CHECK(AdapterManager::GetMonitor()) << "MonitorAdapter is not initialized.";
+  CHECK(AdapterManager::GetPad()) << "PadAdapter is not initialized.";
+  CHECK(AdapterManager::GetPrediction())
+      << "PredictionAdapter is not initialized.";
+  CHECK(AdapterManager::GetPerceptionObstacles())
+      << "PerceptionObstaclesAdapter is not initialized.";
+  CHECK(AdapterManager::GetTrafficLightDetection())
+      << "TrafficLightDetectionAdapter is not initialized.";
+  CHECK(AdapterManager::GetRoutingRequest())
+      << "RoutingRequestAdapter is not initialized.";
+  CHECK(AdapterManager::GetRoutingResponse())
+      << "RoutingResponseAdapter is not initialized.";
+  CHECK(AdapterManager::GetCompressedImage())
+      << "CompressedImageAdapter is not initialized.";
+  CHECK(AdapterManager::GetImageShort())
+      << "ImageShortAdapter is not initialized.";
 
   // Initialize and run the web server which serves the dreamview htmls and
   // javascripts and handles websocket requests.
@@ -63,13 +81,18 @@ Status Dreamview::Init() {
   }
   server_.reset(new CivetServer(options));
 
+  image_.reset(new ImageHandler());
   websocket_.reset(new WebSocketHandler());
-  map_service_.reset(new MapService(BaseMapFile(), SimMapFile()));
-  sim_world_updater_.reset(new SimulationWorldUpdater(
-      websocket_.get(), map_service_.get(), FLAGS_routing_from_file));
+  map_service_.reset(new MapService());
   sim_control_.reset(new SimControl(map_service_.get()));
 
+  sim_world_updater_.reset(
+      new SimulationWorldUpdater(websocket_.get(), sim_control_.get(),
+                                 map_service_.get(), FLAGS_routing_from_file));
+  hmi_.reset(new HMI(websocket_.get(), map_service_.get()));
+
   server_->addWebSocketHandler("/websocket", *websocket_);
+  server_->addHandler("/image", *image_);
 
   return Status::OK();
 }
@@ -77,7 +100,7 @@ Status Dreamview::Init() {
 Status Dreamview::Start() {
   sim_world_updater_->Start();
   if (FLAGS_enable_sim_control) {
-    sim_control_->Start();
+    sim_control_->Init(true);
   }
   return Status::OK();
 }

@@ -31,8 +31,13 @@ namespace planning {
 class PublishableTrajectory : public DiscretizedTrajectory {
  public:
   PublishableTrajectory() = default;
+
   PublishableTrajectory(const double header_time,
                         const DiscretizedTrajectory& discretized_trajectory);
+  /**
+   * Create a publishable trajectory based on a trajectory protobuf
+   */
+  explicit PublishableTrajectory(const ADCTrajectory& trajectory_pb);
 
   double header_time() const;
 
@@ -45,4 +50,4 @@ class PublishableTrajectory : public DiscretizedTrajectory {
 }  // namespace planning
 }  // namespace apollo
 
-#endif  // MODULES_PLANNING_COMMON_TRAJECTORY_PUBLISHABLE_TRAJECTORY_H
+#endif  // MODULES_PLANNING_COMMON_TRAJECTORY_PUBLISHABLE_TRAJECTORY_H_

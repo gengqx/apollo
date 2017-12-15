@@ -36,12 +36,26 @@ cc_library(
     hdrs = [
         "active_set_qp_solver.h",
     ],
+    linkopts = [
+        "-lqp_oases",
+    ],
     deps = [
         ":qp_solver",
         "//modules/common:log",
         "//modules/common/math/qp_solver:qp_solver_gflags",
         "@eigen//:eigen",
-        "@qp_oases//:qp_oases",
+    ],
+)
+
+cc_test(
+    name = "active_set_qp_solver_test",
+    size = "small",
+    srcs = [
+        "active_set_qp_solver_test.cc",
+    ],
+    deps = [
+        ":active_set_qp_solver",
+        "@gtest//:main",
     ],
 )
 

@@ -21,7 +21,7 @@
 #include <queue>
 
 #include "modules/common/log.h"
-
+#include "modules/routing/common/routing_gflags.h"
 #include "modules/routing/graph/sub_topo_graph.h"
 #include "modules/routing/graph/topo_graph.h"
 #include "modules/routing/graph/topo_node.h"
@@ -29,20 +29,16 @@
 
 namespace apollo {
 namespace routing {
-
 namespace {
 
-const double LANE_CHANGE_SKIP_S = 10.0;
-
 struct SearchNode {
-  const TopoNode* topo_node;
-  double f;
+  const TopoNode* topo_node = nullptr;
+  double f = std::numeric_limits<double>::max();
 
-  SearchNode() : topo_node(nullptr), f(std::numeric_limits<double>::max()) {}
+  SearchNode() = default;
   explicit SearchNode(const TopoNode* node)
       : topo_node(node), f(std::numeric_limits<double>::max()) {}
-  SearchNode(const SearchNode& search_node)
-      : topo_node(search_node.topo_node), f(search_node.f) {}
+  SearchNode(const SearchNode& search_node) = default;
 
   bool operator<(const SearchNode& node) const {
     // in order to let the top of priority queue is the smallest one!
@@ -59,21 +55,16 @@ double GetCostToNeighbor(const TopoEdge* edge) {
 }
 
 const TopoNode* GetLargestNode(const std::vector<const TopoNode*>& nodes) {
-  if (nodes.empty()) {
-    return nullptr;
-  } else if (nodes.size() < 2) {
-    return nodes[0];
-  }
-  double max_range = nodes[0]->EndS() - nodes[0]->StartS();
-  size_t max_idx = 0;
-  for (size_t i = 1; i < nodes.size(); ++i) {
-    double temp_range = nodes[i]->EndS() - nodes[i]->StartS();
+  double max_range = 0.0;
+  const TopoNode* largest = nullptr;
+  for (const auto* node : nodes) {
+    const double temp_range = node->EndS() - node->StartS();
     if (temp_range > max_range) {
       max_range = temp_range;
-      max_idx = i;
+      largest = node;
     }
   }
-  return nodes[max_idx];
+  return largest;
 }
 
 bool AdjustLaneChangeBackward(
@@ -192,6 +183,7 @@ bool Reconstruct(
     const TopoNode* dest_node, std::vector<NodeWithRange>* result_nodes) {
   std::vector<const TopoNode*> result_node_vec;
   result_node_vec.push_back(dest_node);
+
   auto iter = came_from.find(dest_node);
   while (iter != came_from.end()) {
     result_node_vec.push_back(iter->second);
@@ -204,9 +196,8 @@ bool Reconstruct(
   }
   result_nodes->clear();
   for (const auto* node : result_node_vec) {
-    NodeSRange range(node->StartS(), node->EndS());
-    NodeWithRange node_with_range(range, node->OriginNode());
-    result_nodes->push_back(node_with_range);
+    result_nodes->emplace_back(node->OriginNode(), node->StartS(),
+                               node->EndS());
   }
   return true;
 }
@@ -272,9 +263,11 @@ bool AStarStrategy::Search(const TopoGraph* graph,
     }
     closed_set_.emplace(from_node);
 
-    // if residual_s is less than LANE_CHANGE_SKIP_S, only move forward
+    // if residual_s is less than FLAGS_min_length_for_lane_change, only move
+    // forward
     const auto& neighbor_edges =
-        (GetResidualS(from_node) > LANE_CHANGE_SKIP_S && change_lane_enabled_)
+        (GetResidualS(from_node) > FLAGS_min_length_for_lane_change &&
+         change_lane_enabled_)
             ? from_node->OutToAllEdge()
             : from_node->OutToSucEdge();
     double tentative_g_score = 0.0;
@@ -290,7 +283,7 @@ bool AStarStrategy::Search(const TopoGraph* graph,
       if (closed_set_.count(to_node) == 1) {
         continue;
       }
-      if (GetResidualS(edge, to_node) < LANE_CHANGE_SKIP_S) {
+      if (GetResidualS(edge, to_node) < FLAGS_min_length_for_lane_change) {
         continue;
       }
       tentative_g_score =
@@ -307,9 +300,10 @@ bool AStarStrategy::Search(const TopoGraph* graph,
       if (edge->Type() == TopoEdgeType::TET_FORWARD) {
         enter_s_[to_node] = to_node->StartS();
       } else {
-        // else, add enter_s with LANE_CHANGE_SKIP_S
-        double to_node_enter_s = (enter_s_[from_node] + LANE_CHANGE_SKIP_S) /
-                                 from_node->Length() * to_node->Length();
+        // else, add enter_s with FLAGS_min_length_for_lane_change
+        double to_node_enter_s =
+            (enter_s_[from_node] + FLAGS_min_length_for_lane_change) /
+            from_node->Length() * to_node->Length();
         // enter s could be larger than end_s but should be less than length
         to_node_enter_s = std::min(to_node_enter_s, to_node->Length());
         // if enter_s is larger than end_s and to_node is dest_node

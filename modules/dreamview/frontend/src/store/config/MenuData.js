@@ -1,5 +1,16 @@
 export default [
     {
+        id: 'camera',
+        title: 'Point of View',
+        type: 'radio',
+        data: {
+            1: 'Default',
+            2: 'Near',
+            3: 'Overhead',
+            4: 'Map'
+        }
+    },
+    {
         id: 'perception',
         title: 'Perception',
         type: 'checkbox',
@@ -42,17 +53,10 @@ export default [
         title: 'Planning',
         type: 'checkbox',
         data: {
-            planningLine: 'Planning Line'
+            planningReference: 'Reference Line',
+            planingDpOptimizer: 'Dp Optimizer Line',
+            planningQpOptimizer: 'Qp Optimizer Line',
+            planningLine: 'Planning Line',
         }
-    }, {
-        id: 'camera',
-        title: 'Point of View',
-        type: 'radio',
-        data: {
-            1: 'Default',
-            2: 'Near',
-            3: 'Overhead',
-            4: 'Map'
-        }
-    }
+    },
 ];

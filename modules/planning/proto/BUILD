@@ -16,14 +16,15 @@ proto_library(
         "planning.proto",
         "planning_config.proto",
         "planning_internal.proto",
-        "qp_spline_st_speed_config.proto",
+        "qp_st_speed_config.proto",
         "sl_boundary.proto",
+        "planning_stats.proto",
     ],
     deps = [
         ":dp_poly_path_config_proto_lib",
         ":dp_st_speed_config_proto_lib",
         ":qp_spline_path_config_proto_lib",
-        ":reference_line_smoother_config_proto_lib",
+        ":qp_spline_reference_line_smoother_config_proto_lib",
         "//modules/canbus/proto:canbus_proto_lib",
         "//modules/common/proto:common_proto_lib",
         "//modules/common/proto:error_code_proto_lib",
@@ -104,16 +105,16 @@ proto_library(
 )
 
 cc_proto_library(
-    name = "reference_line_smoother_config_proto",
+    name = "qp_spline_reference_line_smoother_config_proto",
     deps = [
-        ":reference_line_smoother_config_proto_lib",
+        ":qp_spline_reference_line_smoother_config_proto_lib",
     ],
 )
 
 proto_library(
-    name = "reference_line_smoother_config_proto_lib",
+    name = "qp_spline_reference_line_smoother_config_proto_lib",
     srcs = [
-        "reference_line_smoother_config.proto",
+        "qp_spline_reference_line_smoother_config.proto",
     ],
 )
 

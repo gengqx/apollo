@@ -21,7 +21,9 @@
 
 DECLARE_string(dreamview_module_name);
 
-DECLARE_string(adapter_config_filename);
+DECLARE_string(dreamview_adapter_config_filename);
+
+DECLARE_string(hmi_config_filename);
 
 DECLARE_string(static_file_dir);
 
@@ -37,6 +39,6 @@ DECLARE_string(websocket_timeout_ms);
 
 DECLARE_string(ssl_certificate);
 
-DECLARE_double(map_radius);
+DECLARE_double(sim_map_radius);
 
 #endif  // MODULES_DREAMVIEW_BACKEND_COMMON_DREAMVIEW_GFLAGS_H_

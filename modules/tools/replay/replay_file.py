@@ -22,51 +22,53 @@ import os.path
 import sys
 import argparse
 import rospy
+import glob
 from std_msgs.msg import String
 from google.protobuf import text_format
 
-from modules.localization.proto import localization_pb2
-from modules.perception.proto import perception_obstacle_pb2
-from modules.perception.proto import traffic_light_detection_pb2
-from modules.planning.proto import planning_internal_pb2
-from modules.planning.proto import planning_pb2
-from modules.prediction.proto import prediction_obstacle_pb2
-from modules.routing.proto import routing_pb2
+import common.proto_utils as proto_utils
+from common.message_manager import PbMessageManager
 
-
-def generate_message(topic, filename):
-    """generate message from file"""
-    message = None
-    if topic == "/apollo/planning":
-        message = planning_pb2.ADCTrajectory()
-    elif topic == "/apollo/localization/pose":
-        message = localization_pb2.LocalizationEstimate()
-    elif topic == "/apollo/perception/obstacles":
-        message = perception_obstacle_pb2.PerceptionObstacles()
-    elif topic == "/apollo/prediction":
-        message = prediction_obstacle_pb2.PredictionObstacles()
-    elif topic == "/apollo/routing_response":
-        message = routing_pb2.RoutingResponse()
-    if not message:
-        print "Unknown topic:", topic
-        sys.exit(0)
-    if not os.path.exists(filename):
-        return None
-    f_handle = file(filename, 'r')
-    text_format.Merge(f_handle.read(), message)
-    f_handle.close()
-    return message
+g_message_manager = PbMessageManager()
 
 
 def topic_publisher(topic, filename, period):
     """publisher"""
     rospy.init_node('replay_node', anonymous=True)
-    pub = rospy.Publisher(topic, String, queue_size=1)
-    rate = rospy.Rate(int(1.0 / period))
-    message = generate_message(topic, filename)
-    while not rospy.is_shutdown():
-        pub.publish(str(message))
-        rate.sleep()
+    meta_msg = None
+    msg = None
+    if not topic:
+        print "Topic not specified, start to guess"
+        meta_msg, msg = g_message_manager.parse_file(filename)
+        topic = meta_msg.topic()
+    else:
+        meta_msg = g_message_manager.get_msg_meta_by_topic(topic)
+        if not meta_msg:
+            print("Failed to find meta info for topic: %s" % (topic))
+            return False
+        msg = meta_msg.parse_file(filename)
+        if not msg:
+            print("Failed to parse file[%s] with topic[%s]" % (filename,
+                                                               topic))
+            return False
+
+    if not msg or not meta_msg:
+        print("Unknown topic: %s" % topic)
+        return False
+
+    pub = rospy.Publisher(topic, meta_msg.msg_type(), queue_size=1)
+    if period == 0:
+        while not rospy.is_shutdown():
+            raw_input("Press any key to publish one message...")
+            pub.publish(msg)
+            print("Topic[%s] message published" % topic)
+    else:
+        rate = rospy.Rate(int(1.0 / period))
+        print("started to publish topic[%s] message with rate period %s" %
+              (topic, period))
+        while not rospy.is_shutdown():
+            pub.publish(msg)
+            rate.sleep()
 
 
 if __name__ == '__main__':
@@ -75,16 +77,36 @@ if __name__ == '__main__':
     parser.add_argument(
         "filename", action="store", type=str, help="planning result files")
     parser.add_argument(
-        "topic", action="store", type=str, help="set the planning topic")
+        "--topic", action="store", type=str, help="set the planning topic")
     parser.add_argument(
         "--period",
         action="store",
         type=float,
-        default=1,
+        default=0.1,
         help="set the topic publish time duration")
     args = parser.parse_args()
+    period = 0.0  # use step by step mode
+    if args.period:  # play with a given period, (1.0 / frequency)
+        period = args.period
+    to_replay = args.filename
+    files = []
+    if os.path.isdir(args.filename):
+        files = glob.glob(args.filename + "/*")
+        i = 0
+        for f in files:
+            print "%d  %s" % (i, f)
+            i += 1
+        str_input = raw_input("Select message by number: ")
+        try:
+            selected_file = int(str_input)
+            if selected_file < 0 or selected_file > len(files):
+                print "%d is an invalid number" % selected_file
+        except:
+            print "%s is not a number" % str_input
+        print "Will publish file[%d]: %s" % (selected_file,
+                                             files[selected_file])
+        to_replay = files[selected_file]
     try:
-        topic_publisher(args.topic, args.filename, args.period)
-
+        topic_publisher(args.topic, to_replay, period)
     except rospy.ROSInterruptException:
         print "failed to replay message"

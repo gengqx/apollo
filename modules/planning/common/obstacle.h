@@ -53,6 +53,7 @@ class Obstacle {
   std::int32_t PerceptionId() const;
 
   bool IsStatic() const;
+  bool IsVirtual() const;
 
   common::TrajectoryPoint GetPointAtTime(const double time) const;
 
@@ -81,14 +82,19 @@ class Obstacle {
    * @param predictions The prediction results
    * @return obstacles The output obstacles saved in a list of unique_ptr.
    */
-  static std::vector<std::unique_ptr<Obstacle>> CreateObstacles(
+  static std::list<std::unique_ptr<Obstacle>> CreateObstacles(
       const prediction::PredictionObstacles &predictions);
+
+  static std::unique_ptr<Obstacle> CreateStaticVirtualObstacles(
+      const std::string &id, const common::math::Box2d &obstacle_box);
 
   static bool IsStaticObstacle(
       const perception::PerceptionObstacle &perception_obstacle);
 
   static bool IsVirtualObstacle(
       const perception::PerceptionObstacle &perception_obstacle);
+
+  static bool IsValidTrajectoryPoint(const common::TrajectoryPoint &point);
 
  private:
   std::string id_;
@@ -103,6 +109,7 @@ class Obstacle {
 };
 
 typedef IndexedList<std::string, Obstacle> IndexedObstacles;
+typedef ThreadSafeIndexedList<std::string, Obstacle> ThreadSafeIndexedObstacles;
 
 }  // namespace planning
 }  // namespace apollo

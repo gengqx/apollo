@@ -18,7 +18,6 @@
 
 #include "modules/common/proto/vehicle_signal.pb.h"
 
-#include "modules/canbus/can_comm/can_sender.h"
 #include "modules/canbus/vehicle/lincoln/lincoln_message_manager.h"
 #include "modules/canbus/vehicle/lincoln/protocol/brake_60.h"
 #include "modules/canbus/vehicle/lincoln/protocol/gear_66.h"
@@ -28,11 +27,14 @@
 #include "modules/canbus/vehicle/vehicle_controller.h"
 #include "modules/common/log.h"
 #include "modules/common/time/time.h"
+#include "modules/drivers/canbus/can_comm/can_sender.h"
+#include "modules/drivers/canbus/can_comm/protocol_data.h"
 
 namespace apollo {
 namespace canbus {
 namespace lincoln {
 
+using ::apollo::drivers::canbus::ProtocolData;
 using common::ErrorCode;
 using control::ControlCommand;
 
@@ -41,11 +43,12 @@ namespace {
 const int32_t kMaxFailAttempt = 10;
 const int32_t CHECK_RESPONSE_STEER_UNIT_FLAG = 1;
 const int32_t CHECK_RESPONSE_SPEED_UNIT_FLAG = 2;
-}
+}  // namespace
 
-ErrorCode LincolnController::Init(const VehicleParameter &params,
-                                  CanSender *const can_sender,
-                                  MessageManager *const message_manager) {
+ErrorCode LincolnController::Init(
+    const VehicleParameter &params,
+    CanSender<::apollo::canbus::ChassisDetail> *const can_sender,
+    MessageManager<::apollo::canbus::ChassisDetail> *const message_manager) {
   if (is_initialized_) {
     AINFO << "LincolnController has already been initiated.";
     return ErrorCode::CANBUS_ERROR;
@@ -144,7 +147,7 @@ Chassis LincolnController::chassis() {
   chassis_.Clear();
 
   ChassisDetail chassis_detail;
-  message_manager_->GetChassisDetail(&chassis_detail);
+  message_manager_->GetSensorData(&chassis_detail);
 
   // 21, 22, previously 1, 2
   if (driving_mode() == Chassis::EMERGENCY_MODE) {
@@ -252,6 +255,46 @@ Chassis LincolnController::chassis() {
   // 26
   if (chassis_error_mask_) {
     chassis_.set_chassis_error_mask(chassis_error_mask_);
+  }
+
+  // 6d, 6e, 6f, if gps valid is availiable, assume all gps related field
+  // available
+  if (chassis_detail.basic().has_gps_valid()) {
+    chassis_.mutable_chassis_gps()->set_latitude(
+        chassis_detail.basic().latitude());
+    chassis_.mutable_chassis_gps()->set_longitude(
+        chassis_detail.basic().longitude());
+    chassis_.mutable_chassis_gps()->set_gps_valid(
+        chassis_detail.basic().gps_valid());
+    chassis_.mutable_chassis_gps()->set_year(chassis_detail.basic().year());
+    chassis_.mutable_chassis_gps()->set_month(chassis_detail.basic().month());
+    chassis_.mutable_chassis_gps()->set_day(chassis_detail.basic().day());
+    chassis_.mutable_chassis_gps()->set_hours(chassis_detail.basic().hours());
+    chassis_.mutable_chassis_gps()->set_minutes(
+        chassis_detail.basic().minutes());
+    chassis_.mutable_chassis_gps()->set_seconds(
+        chassis_detail.basic().seconds());
+    chassis_.mutable_chassis_gps()->set_compass_direction(
+        chassis_detail.basic().compass_direction());
+    chassis_.mutable_chassis_gps()->set_pdop(chassis_detail.basic().pdop());
+    chassis_.mutable_chassis_gps()->set_is_gps_fault(
+        chassis_detail.basic().is_gps_fault());
+    chassis_.mutable_chassis_gps()->set_is_inferred(
+        chassis_detail.basic().is_inferred());
+    chassis_.mutable_chassis_gps()->set_altitude(
+        chassis_detail.basic().altitude());
+    chassis_.mutable_chassis_gps()->set_heading(
+        chassis_detail.basic().heading());
+    chassis_.mutable_chassis_gps()->set_hdop(chassis_detail.basic().hdop());
+    chassis_.mutable_chassis_gps()->set_vdop(chassis_detail.basic().vdop());
+    chassis_.mutable_chassis_gps()->set_quality(
+        chassis_detail.basic().quality());
+    chassis_.mutable_chassis_gps()->set_num_satellites(
+        chassis_detail.basic().num_satellites());
+    chassis_.mutable_chassis_gps()->set_gps_speed(
+        chassis_detail.basic().gps_speed());
+  } else {
+    chassis_.mutable_chassis_gps()->set_gps_valid(false);
   }
 
   return chassis_;
@@ -441,9 +484,10 @@ void LincolnController::Steer(double angle, double angle_spd) {
     return;
   }
   const double real_angle = params_.max_steer_angle() * angle / 100.0;
-  const double real_angle_spd = ProtocolData::BoundedValue(
-      params_.min_steer_angle_spd(), params_.max_steer_angle_spd(),
-      params_.max_steer_angle_spd() * angle_spd / 100.0);
+  const double real_angle_spd =
+      ProtocolData<::apollo::canbus::ChassisDetail>::BoundedValue(
+          params_.min_steer_angle_spd(), params_.max_steer_angle_spd(),
+          params_.max_steer_angle_spd() * angle_spd / 100.0);
   steering_64_->set_steering_angle(real_angle)
       ->set_steering_angle_speed(real_angle_spd);
 }
@@ -493,7 +537,7 @@ void LincolnController::ResetProtocol() {
 bool LincolnController::CheckChassisError() {
   // steer fault
   ChassisDetail chassis_detail;
-  message_manager_->GetChassisDetail(&chassis_detail);
+  message_manager_->GetSensorData(&chassis_detail);
 
   int32_t error_cnt = 0;
   int32_t chassis_error_mask = 0;
@@ -624,8 +668,7 @@ void LincolnController::SecurityDogThreadFunc() {
 
   std::chrono::duration<double, std::micro> default_period{50000};
   int64_t start =
-      common::time::AsInt64<common::time::micros>(
-          common::time::Clock::Now());
+      common::time::AsInt64<common::time::micros>(common::time::Clock::Now());
 
   int32_t speed_ctrl_fail = 0;
   int32_t steer_ctrl_fail = 0;
@@ -668,8 +711,7 @@ void LincolnController::SecurityDogThreadFunc() {
       Emergency();
     }
     int64_t end =
-        common::time::AsInt64<common::time::micros>(
-            common::time::Clock::Now());
+        common::time::AsInt64<common::time::micros>(common::time::Clock::Now());
     std::chrono::duration<double, std::micro> elapsed{end - start};
     if (elapsed < default_period) {
       std::this_thread::sleep_for(default_period - elapsed);
@@ -693,7 +735,7 @@ bool LincolnController::CheckResponse(const int32_t flags, bool need_wait) {
   bool is_esp_online = false;
 
   do {
-    if (message_manager_->GetChassisDetail(&chassis_detail) != ErrorCode::OK) {
+    if (message_manager_->GetSensorData(&chassis_detail) != ErrorCode::OK) {
       AERROR_EVERY(100) << "get chassis detail failed.";
       return false;
     }

@@ -1,13 +1,17 @@
 # Routing
 
 ## Introduction
-  Based on planning and current car status, use different control algorithms to
-  generate comfortable driving experience.
+  Routing module generates high level navigation information based on request.
 
+  Routing module depends on a routing topology file, usually named `routing_map.*` in apollo.
+  The routing map can be genreated by command
+  ```
+  bash scripts/generate_routing_topo_graph.sh
+  ```
 ## Input
-  * Planning trajectory
-  * Car status
-  * HMI AUTO mode change request
+  * Map data
+  * Routing request (Start and end location)
 
 ## Output
-  * control command (steering, throttle, brake) to canbus.
+  * Routing navigation information
+

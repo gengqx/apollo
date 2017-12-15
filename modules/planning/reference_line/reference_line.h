@@ -27,6 +27,7 @@
 
 #include "modules/common/proto/pnc_point.pb.h"
 #include "modules/planning/proto/sl_boundary.pb.h"
+#include "modules/routing/proto/routing.pb.h"
 
 #include "modules/common/math/vec2d.h"
 #include "modules/map/pnc_map/path.h"
@@ -38,16 +39,46 @@ namespace planning {
 class ReferenceLine {
  public:
   ReferenceLine() = default;
+  explicit ReferenceLine(const ReferenceLine& reference_line) = default;
+  template <typename Iterator>
+  explicit ReferenceLine(const Iterator begin, const Iterator end)
+      : reference_points_(begin, end),
+        map_path_(hdmap::Path(std::vector<hdmap::MapPathPoint>(begin, end))) {}
   explicit ReferenceLine(const std::vector<ReferencePoint>& reference_points);
   explicit ReferenceLine(const hdmap::Path& hdmap_path);
-  ReferenceLine(const std::vector<ReferencePoint>& reference_points,
-                const std::vector<hdmap::LaneSegment>& lane_segments,
-                const double max_approximation_error);
+
+  /** Stitch current reference line with the other reference line
+   * The stitching strategy is to use current reference points as much as
+   * possible. The following two examples show two successful stitch cases.
+   *
+   * Example 1
+   * this:   |--------A-----x-----B------|
+   * other:                 |-----C------x--------D-------|
+   * Result: |------A-----x-----B------x--------D-------|
+   * In the above example, A-B is current reference line, and C-D is the other
+   * reference line. If part B and part C matches, we update current reference
+   * line to A-B-D.
+   *
+   * Example 2
+   * this:                  |-----A------x--------B-------|
+   * other:  |--------C-----x-----D------|
+   * Result: |--------C-----x-----A------x--------B-------|
+   * In the above example, A-B is current reference line, and C-D is the other
+   * reference line. If part A and part D matches, we update current reference
+   * line to C-A-B.
+   *
+   * @return false if these two reference line cannot be stitched
+   */
+  bool Stitch(const ReferenceLine& other);
+
+  bool Shrink(const common::math::Vec2d& point, double look_backward,
+              double look_forward);
 
   const hdmap::Path& map_path() const;
   const std::vector<ReferencePoint>& reference_points() const;
 
   ReferencePoint GetReferencePoint(const double s) const;
+  ReferencePoint GetNearestReferencepoint(const double s) const;
   ReferencePoint GetReferencePoint(const double x, const double y) const;
 
   bool GetSLBoundary(const common::math::Box2d& box,
@@ -61,6 +92,17 @@ class ReferenceLine {
   bool GetLaneWidth(const double s, double* const left_width,
                     double* const right_width) const;
   bool IsOnRoad(const common::SLPoint& sl_point) const;
+  bool IsOnRoad(const common::math::Vec2d& vec2d_point) const;
+
+  /**
+   * @brief Check if a box is blocking the road surface. The crieria is to check
+   * whether the remaining space on the road surface is larger than the provided
+   * gap space.
+   * @param boxed the provided box
+   * @param gap check the gap of the space
+   * @return true if the box blocks the road.
+   */
+  bool IsBlockRoad(const common::math::Box2d& box2d, double gap) const;
 
   /**
    * @brief check if any part of the box has overlap with the road.
@@ -95,6 +137,9 @@ class ReferenceLine {
   static ReferencePoint Interpolate(const ReferencePoint& p0, const double s0,
                                     const ReferencePoint& p1, const double s1,
                                     const double s);
+  ReferencePoint InterpolateWithMatchedIndex(
+      const ReferencePoint& p0, const double s0, const ReferencePoint& p1,
+      const double s1, const hdmap::InterpolatedIndex& index) const;
 
   static double FindMinDistancePoint(const ReferencePoint& p0, const double s0,
                                      const ReferencePoint& p1, const double s1,

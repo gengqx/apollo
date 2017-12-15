@@ -48,27 +48,44 @@ ActiveSetQpSolver::ActiveSetQpSolver(
       debug_info_(FLAGS_default_enable_active_set_debug_info) {}
 
 bool ActiveSetQpSolver::Solve() {
-  ::qpOASES::QProblem qp_problem(num_param_, num_constraint_);
+  ::qpOASES::QProblem qp_problem(num_param_, num_constraint_, hessian_type_);
   ::qpOASES::Options my_options;
+
+  my_options.enableCholeskyRefactorisation = cholesky_refactorisation_freq_;
+  if (hessian_type_ == ::qpOASES::HST_POSDEF ||
+      hessian_type_ == ::qpOASES::HST_SEMIDEF) {
+    my_options.enableRegularisation = ::qpOASES::BT_TRUE;
+  }
   my_options.epsNum = qp_eps_num_;
   my_options.epsDen = qp_eps_den_;
   my_options.epsIterRef = qp_eps_iter_ref_;
+  my_options.terminationTolerance = termination_tolerance_;
   qp_problem.setOptions(my_options);
   if (!debug_info_) {
     qp_problem.setPrintLevel(qpOASES::PL_NONE);
   }
+  if (kernel_matrix_.rows() != kernel_matrix_.cols()) {
+    AERROR << "kernel_matrix_.rows() [" << kernel_matrix_.rows()
+           << "] and kernel_matrix_.cols() [" << kernel_matrix_.cols()
+           << "] should be identical.";
+    return false;
+  }
   // definition of qpOASESproblem
-  double h_matrix[kernel_matrix_.rows() * kernel_matrix_.cols()];  // NOLINT
-  double g_matrix[offset_.rows()];                                 // NOLINT
+  const int kNumOfMatrixElements =
+      kernel_matrix_.rows() * kernel_matrix_.cols();
+  double h_matrix[kNumOfMatrixElements];  // NOLINT
+
+  const int kNumOfOffsetRows = offset_.rows();
+  double g_matrix[kNumOfOffsetRows];  // NOLINT
   int index = 0;
 
   for (int r = 0; r < kernel_matrix_.rows(); ++r) {
     g_matrix[r] = offset_(r, 0);
-
     for (int c = 0; c < kernel_matrix_.cols(); ++c) {
       h_matrix[index++] = kernel_matrix_(r, c);
     }
   }
+  DCHECK_EQ(index, kernel_matrix_.rows() * kernel_matrix_.cols());
 
   // search space lower bound and uppper bound
   double lower_bound[num_param_];  // NOLINT
@@ -96,6 +113,8 @@ bool ActiveSetQpSolver::Solve() {
     }
   }
 
+  DCHECK_EQ(index, affine_equality_matrix_.rows() * num_param_);
+
   for (int r = 0; r < affine_inequality_matrix_.rows(); ++r) {
     constraint_lower_bound[r + affine_equality_boundary_.rows()] =
         affine_inequality_boundary_(r, 0);
@@ -107,6 +126,8 @@ bool ActiveSetQpSolver::Solve() {
       affine_constraint_matrix[index++] = affine_inequality_matrix_(r, c);
     }
   }
+  DCHECK_EQ(index, affine_equality_matrix_.rows() * num_param_ +
+                       affine_inequality_boundary_.rows() * num_param_);
 
   // initialize problem
   int max_iter = std::max(max_iteration_, num_constraint_);
@@ -121,24 +142,31 @@ bool ActiveSetQpSolver::Solve() {
       AERROR << "qpOASES solver failed due to infeasibility or other internal "
                 "reasons";
     }
+    std::stringstream ss;
+    ss << "ActiveSetQpSolver inputs: " << std::endl;
+    ss << "kernel_matrix:\n" << kernel_matrix_ << std::endl;
+    ss << "offset:\n" << offset_ << std::endl;
+    ss << "affine_inequality_matrix:\n"
+       << affine_inequality_matrix_ << std::endl;
+    ss << "affine_inequality_boundary:\n"
+       << affine_inequality_boundary_ << std::endl;
+    ss << "affine_equality_matrix:\n" << affine_equality_matrix_ << std::endl;
+    ss << "affine_equality_boundary:\n"
+       << affine_equality_boundary_ << std::endl;
+
+    ADEBUG << ss.str();
+
     return false;
   }
 
   double result[num_param_];  // NOLINT
-
   qp_problem.getPrimalSolution(result);
 
   params_ = Eigen::MatrixXd::Zero(num_param_, 1);
-
-  if (qp_problem.isSolved() == qpOASES::BT_TRUE) {
-    for (int i = 0; i < num_param_; ++i) {
-      params_(i, 0) = result[i];
-    }
-
-    return true;
+  for (int i = 0; i < num_param_; ++i) {
+    params_(i, 0) = result[i];
   }
-
-  return false;
+  return qp_problem.isSolved() == qpOASES::BT_TRUE;
 }
 
 void ActiveSetQpSolver::set_qp_eps_num(const double eps) { qp_eps_num_ = eps; }

@@ -20,10 +20,9 @@
 #include <limits>
 #include <numeric>
 
-#include "modules/map/proto/map_lane.pb.h"
-
 #include "modules/common/math/math_utils.h"
 #include "modules/common/util/file.h"
+#include "modules/map/proto/map_lane.pb.h"
 #include "modules/prediction/common/prediction_gflags.h"
 #include "modules/prediction/common/prediction_util.h"
 
@@ -46,7 +45,7 @@ double ComputeMean(const std::vector<double>& nums, size_t start, size_t end) {
 
 }  // namespace
 
-MLPEvaluator::MLPEvaluator() { LoadModel(FLAGS_vehicle_model_file); }
+MLPEvaluator::MLPEvaluator() { LoadModel(FLAGS_evaluator_vehicle_mlp_file); }
 
 void MLPEvaluator::Clear() { obstacle_feature_values_map_.clear(); }
 
@@ -142,8 +141,7 @@ void MLPEvaluator::SetObstacleFeatureValues(
     if (!feature.IsInitialized()) {
       continue;
     }
-    if (apollo::common::math::DoubleCompare(feature.timestamp(), duration) <
-        0) {
+    if (feature.timestamp() < duration) {
       break;
     }
     if (feature.has_lane() && feature.lane().has_lane_feature()) {
@@ -342,7 +340,7 @@ double MLPEvaluator::ComputeProbability(
     double mean = model_ptr_->samples_mean().columns(i);
     double std = model_ptr_->samples_std().columns(i);
     layer_input.push_back(
-        apollo::prediction::util::Normalize(feature_values[i], mean, std));
+        apollo::prediction::math_util::Normalize(feature_values[i], mean, std));
   }
 
   for (int i = 0; i < model_ptr_->num_layer(); ++i) {
@@ -358,16 +356,16 @@ double MLPEvaluator::ComputeProbability(
         neuron_output += (layer_input[row] * weight);
       }
       if (layer.layer_activation_func() == Layer::RELU) {
-        neuron_output = apollo::prediction::util::Relu(neuron_output);
+        neuron_output = apollo::prediction::math_util::Relu(neuron_output);
       } else if (layer.layer_activation_func() == Layer::SIGMOID) {
-        neuron_output = apollo::prediction::util::Sigmoid(neuron_output);
+        neuron_output = apollo::prediction::math_util::Sigmoid(neuron_output);
       } else if (layer.layer_activation_func() == Layer::TANH) {
         neuron_output = std::tanh(neuron_output);
       } else {
         AERROR << "Undefined activation function ["
                << layer.layer_activation_func()
                << "]. A default sigmoid will be used instead.";
-        neuron_output = apollo::prediction::util::Sigmoid(neuron_output);
+        neuron_output = apollo::prediction::math_util::Sigmoid(neuron_output);
       }
       layer_output.push_back(neuron_output);
     }

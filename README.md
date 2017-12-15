@@ -11,6 +11,7 @@ not because they are easy, but because they are hard.
 Welcome to the Apollo GitHub.
 
 [Apollo](http://apollo.auto) is an open autonomous driving platform. It is a high performance flexible architecture which supports fully autonomous driving capabilities.
+For business contact, please visit http://apollo.auto
 
 
 ## Installation
@@ -22,8 +23,10 @@ See the following instructions on how to set up the docker environment and build
 
 ```
 bash docker/scripts/install_docker.sh
-# logout and login to make sure to run docker command without sudo
+# logout and login the computer to make sure to run docker command without sudo
 docker ps  # to verify docker works without sudo
+# in case you forgot to logout and login back, do so, remove ~/.docker/config.json
+# and check again with `docker ps`
 bash docker/scripts/dev_start.sh
 bash docker/scripts/dev_into.sh
 ```
@@ -37,28 +40,23 @@ bash apollo.sh build
 Follow the steps below to launch Apollo:
 ### Start Apollo
 ```
-# start Human Machine Interface(HMI)
-bash scripts/hmi.sh
+# start module monitor
+bash scripts/bootstrap.sh
 ```
-### Access HMI
-Access HMI by opening your favorite browser, e.g. Chrome, go to http://localhost:8887, click Dreamview to start.
-![HMI Enable Dreamview](docs/demo_guide/images/dreamview_enable.png)
+### Access Dreamview
+Access Dreamview by opening your favorite browser, e.g. Chrome, go to http://localhost:8888
+![Access Dreamview](docs/demo_guide/images/apollo_bootstrap_screen.png)
 
-
-Click upper-right Dreamview button
-![HMI Launch Dreamview](docs/demo_guide/images/dreamview_launch.png)
-
-to load Dreamview UI.
-
-![Open Dreamview](docs/quickstart/images/hmi_open_dreamview.png)
 
 ### Replay demo rosbag
 ```
 # in a different terminal, in the apollo directory
 bash docker/scripts/dev_into.sh # jump into the docker container
-rosbag play -l ./docs/demo_guide/demo_1.5.bag
+bash ./docs/demo_guide/rosbag_helper.sh download # download rosbag
+rosbag play -l ./docs/demo_guide/demo_1.5.np.bag
 ```
-Dreamview should show a running vehicle with trajectory now.
+
+Dreamview should show a running vehicle now. (The following image might be different due to changes in frontend.)
 ![Dreamview with Trajectory](docs/demo_guide/images/dv_trajectory_1.5.png)
 
 Advanced users who wish to build outside this Docker container can refer
@@ -72,6 +70,7 @@ Apollo documents can be found under the [docs](https://github.com/ApolloAuto/apo
    * [how to contribute code](https://github.com/ApolloAuto/apollo/blob/master/CONTRIBUTING.md): the guide for contributing code to Apollo.
    * [howto](https://github.com/ApolloAuto/apollo/blob/master/docs/howto/): tutorials on how to build, run and modify codes.
    * [specs](https://github.com/ApolloAuto/apollo/blob/master/docs/specs/): Specification documents of Apollo 1.5.
+   * [Doxygen APIs](https://apolloauto.github.io/doxygen/apollo/): Apollo Doxygen pages
 
 ## Ask Questions
 

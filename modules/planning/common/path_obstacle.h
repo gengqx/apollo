@@ -89,6 +89,10 @@ class PathObstacle {
 
   const StBoundary& st_boundary() const;
 
+  const std::vector<std::string>& decider_tags() const;
+
+  const std::vector<ObjectDecisionType>& decisions() const;
+
   void AddLongitudinalDecision(const std::string& decider_tag,
                                const ObjectDecisionType& decision);
 
@@ -96,7 +100,15 @@ class PathObstacle {
                           const ObjectDecisionType& decision);
   bool HasLateralDecision() const;
 
+  void SetStBoundary(const StBoundary& boundary);
+
+  void SetStBoundaryType(const StBoundary::BoundaryType type);
+
+  void EraseStBoundary();
+
   bool HasLongitudinalDecision() const;
+
+  bool HasNonIgnoreDecision() const;
 
   /**
    * @brief Check if this object can be safely ignored.
@@ -105,6 +117,8 @@ class PathObstacle {
    *  return longitudinal_decision_ == ignore && lateral_decision == ignore.
    */
   bool IsIgnore() const;
+  bool IsLongitudinalIgnore() const;
+  bool IsLateralIgnore() const;
 
  private:
   /**
@@ -132,7 +146,8 @@ class PathObstacle {
   bool BuildTrajectoryStBoundary(const ReferenceLine& reference_line,
                                  const double adc_start_s,
                                  StBoundary* const st_boundary);
-
+  bool IsValidObstacle(
+      const perception::PerceptionObstacle& perception_obstacle);
   std::string id_;
   const Obstacle* obstacle_ = nullptr;
   std::vector<ObjectDecisionType> decisions_;

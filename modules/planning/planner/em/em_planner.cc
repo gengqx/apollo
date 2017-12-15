@@ -17,6 +17,7 @@
 #include "modules/planning/planner/em/em_planner.h"
 
 #include <fstream>
+#include <limits>
 #include <utility>
 
 #include "modules/common/adapters/adapter_manager.h"
@@ -25,19 +26,19 @@
 #include "modules/common/time/time.h"
 #include "modules/common/util/string_tokenizer.h"
 #include "modules/common/util/string_util.h"
-#include "modules/common/vehicle_state/vehicle_state.h"
+#include "modules/common/vehicle_state/vehicle_state_provider.h"
 #include "modules/map/hdmap/hdmap.h"
 #include "modules/map/hdmap/hdmap_common.h"
 #include "modules/planning/common/frame.h"
 #include "modules/planning/common/planning_gflags.h"
 #include "modules/planning/constraint_checker/constraint_checker.h"
 #include "modules/planning/math/curve1d/quartic_polynomial_curve1d.h"
-#include "modules/planning/planner/em/decider.h"
 #include "modules/planning/tasks/dp_poly_path/dp_poly_path_optimizer.h"
 #include "modules/planning/tasks/dp_st_speed/dp_st_speed_optimizer.h"
 #include "modules/planning/tasks/path_decider/path_decider.h"
 #include "modules/planning/tasks/qp_spline_path/qp_spline_path_optimizer.h"
 #include "modules/planning/tasks/qp_spline_st_speed/qp_spline_st_speed_optimizer.h"
+#include "modules/planning/tasks/speed_decider/speed_decider.h"
 #include "modules/planning/tasks/traffic_decider/traffic_decider.h"
 
 namespace apollo {
@@ -61,6 +62,8 @@ void EMPlanner::RegisterTasks() {
                          []() -> Task* { return new PathDecider(); });
   task_factory_.Register(DP_ST_SPEED_OPTIMIZER,
                          []() -> Task* { return new DpStSpeedOptimizer(); });
+  task_factory_.Register(SPEED_DECIDER,
+                         []() -> Task* { return new SpeedDecider(); });
   task_factory_.Register(QP_SPLINE_PATH_OPTIMIZER,
                          []() -> Task* { return new QpSplinePathOptimizer(); });
   task_factory_.Register(QP_SPLINE_ST_SPEED_OPTIMIZER, []() -> Task* {
@@ -87,29 +90,58 @@ Status EMPlanner::Init(const PlanningConfig& config) {
   return Status::OK();
 }
 
-void EMPlanner::RecordDebugInfo(const std::string& name,
-                                const double time_diff_ms,
-                                planning::LatencyStats* ptr_latency_stats) {
+void EMPlanner::RecordObstacleDebugInfo(
+    ReferenceLineInfo* reference_line_info) {
   if (!FLAGS_enable_record_debug) {
     ADEBUG << "Skip record debug info";
     return;
   }
+  auto ptr_debug = reference_line_info->mutable_debug();
+
+  const auto path_decision = reference_line_info->path_decision();
+  for (const auto path_obstacle : path_decision->path_obstacles().Items()) {
+    auto obstacle_debug = ptr_debug->mutable_planning_data()->add_obstacle();
+    obstacle_debug->set_id(path_obstacle->Id());
+    obstacle_debug->mutable_sl_boundary()->CopyFrom(
+        path_obstacle->perception_sl_boundary());
+    const auto& decider_tags = path_obstacle->decider_tags();
+    const auto& decisions = path_obstacle->decisions();
+    if (decider_tags.size() != decisions.size()) {
+      AERROR << "decider_tags size: " << decider_tags.size()
+             << " different from decisions size:" << decisions.size();
+    }
+    for (size_t i = 0; i < decider_tags.size(); ++i) {
+      auto decision_tag = obstacle_debug->add_decision_tag();
+      decision_tag->set_decider_tag(decider_tags[i]);
+      decision_tag->mutable_decision()->CopyFrom(decisions[i]);
+    }
+  }
+}
+
+void EMPlanner::RecordDebugInfo(ReferenceLineInfo* reference_line_info,
+                                const std::string& name,
+                                const double time_diff_ms) {
+  if (!FLAGS_enable_record_debug) {
+    ADEBUG << "Skip record debug info";
+    return;
+  }
+  if (reference_line_info == nullptr) {
+    AERROR << "Reference line info is null.";
+    return;
+  }
+
+  auto ptr_latency_stats = reference_line_info->mutable_latency_stats();
+
   auto ptr_stats = ptr_latency_stats->add_task_stats();
   ptr_stats->set_name(name);
   ptr_stats->set_time_ms(time_diff_ms);
 }
 
-void EMPlanner::PopulateDecision(const ReferenceLineInfo& reference_line_info,
-                                 Frame* frame) {
-  auto* planning_pb = frame->MutableADCTrajectory();
-  *planning_pb->mutable_decision() = Decider::MakeDecision(reference_line_info);
-}
-
 Status EMPlanner::Plan(const TrajectoryPoint& planning_start_point,
                        Frame* frame, ReferenceLineInfo* reference_line_info) {
-  if (!frame) {
-    AERROR << "Frame is empty in EMPlanner";
-    return Status(ErrorCode::PLANNING_ERROR, "Frame is null");
+  const double kStraightForwardLineCost = 10.0;
+  if (!reference_line_info->IsChangeLanePath()) {
+    reference_line_info->AddCost(kStraightForwardLineCost);
   }
 
   ADEBUG << "planning start point:" << planning_start_point.DebugString();
@@ -122,36 +154,47 @@ Status EMPlanner::Plan(const TrajectoryPoint& planning_start_point,
   }
   heuristic_speed_data->set_speed_vector(speed_profile);
 
-  auto ptr_debug = reference_line_info->mutable_debug();
-  auto ptr_latency_stats = reference_line_info->mutable_latency_stats();
   auto ret = Status::OK();
+
   for (auto& optimizer : tasks_) {
-    const double start_timestamp = Clock::NowInSecond();
+    const double start_timestamp = Clock::NowInSeconds();
     ret = optimizer->Execute(frame, reference_line_info);
     if (!ret.ok()) {
+      reference_line_info->AddCost(std::numeric_limits<double>::infinity());
       AERROR << "Failed to run tasks[" << optimizer->Name()
              << "], Error message: " << ret.error_message();
       break;
     }
-    const double end_timestamp = Clock::NowInSecond();
+    const double end_timestamp = Clock::NowInSeconds();
     const double time_diff_ms = (end_timestamp - start_timestamp) * 1000;
 
     ADEBUG << "after optimizer " << optimizer->Name() << ":"
            << reference_line_info->PathSpeedDebugString() << std::endl;
     ADEBUG << optimizer->Name() << " time spend: " << time_diff_ms << " ms.";
 
-    if (FLAGS_enable_record_debug && ptr_debug != nullptr &&
-        ptr_latency_stats != nullptr) {
-      RecordDebugInfo(optimizer->Name(), time_diff_ms, ptr_latency_stats);
-    }
+    RecordDebugInfo(reference_line_info, optimizer->Name(), time_diff_ms);
   }
+
+  RecordObstacleDebugInfo(reference_line_info);
+
   DiscretizedTrajectory trajectory;
   if (!reference_line_info->CombinePathAndSpeedProfile(
-          FLAGS_output_trajectory_time_resolution,
-          planning_start_point.relative_time(), &trajectory)) {
+          planning_start_point.relative_time(),
+          planning_start_point.path_point().s(), &trajectory)) {
     std::string msg("Fail to aggregate planning trajectory.");
     AERROR << msg;
     return Status(ErrorCode::PLANNING_ERROR, msg);
+  }
+
+  for (const auto* path_obstacle :
+       reference_line_info->path_decision()->path_obstacles().Items()) {
+    if (!path_obstacle->obstacle()->IsStatic()) {
+      continue;
+    }
+    if (path_obstacle->LongitudinalDecision().has_stop()) {
+      constexpr double kRefrenceLineStaticObsCost = 1e3;
+      reference_line_info->AddCost(kRefrenceLineStaticObsCost);
+    }
   }
 
   if (FLAGS_enable_trajectory_check) {
@@ -159,8 +202,9 @@ Status EMPlanner::Plan(const TrajectoryPoint& planning_start_point,
   }
 
   reference_line_info->SetTrajectory(trajectory);
-  PopulateDecision(*reference_line_info, frame);
-
+  if (ret == Status::OK()) {  // vehicle can drive on this reference line.
+    reference_line_info->SetDriable(true);
+  }
   return ret;
 }
 
@@ -174,7 +218,7 @@ std::vector<SpeedPoint> EMPlanner::GenerateInitSpeedProfile(
     return speed_profile;
   }
   const ReferenceLineInfo* last_reference_line_info =
-      last_frame->DriveReferenceLinfInfo();
+      last_frame->DriveReferenceLineInfo();
   if (!last_reference_line_info) {
     ADEBUG << "last reference line info is empty";
     return speed_profile;
@@ -199,9 +243,10 @@ std::vector<SpeedPoint> EMPlanner::GenerateInitSpeedProfile(
                    planning_init_point.path_point().y());
     SLPoint sl_point;
     if (!last_reference_line_info->reference_line().XYToSL(xy_point,
-                                                           &last_sl_point)) {
+                                                           &sl_point)) {
       AERROR << "Fail to transfer xy to sl when init speed profile";
     }
+
     double s_diff = sl_point.s() - last_sl_point.s();
     double start_time = 0.0;
     double start_s = 0.0;
@@ -243,8 +288,8 @@ std::vector<SpeedPoint> EMPlanner::GenerateSpeedHotStart(
 
     hot_start_speed_profile.push_back(std::move(speed_point));
 
-    t += FLAGS_trajectory_time_resolution;
-    s += v * FLAGS_trajectory_time_resolution;
+    t += FLAGS_trajectory_time_min_interval;
+    s += v * FLAGS_trajectory_time_min_interval;
   }
   return hot_start_speed_profile;
 }

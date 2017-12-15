@@ -18,12 +18,13 @@
  * @file discretized_trajectory.h
  **/
 
-#ifndef MODULES_PLANNING_COMMON_TRAJECTORY_DISCRETIZED_TRAJECTORY_H
-#define MODULES_PLANNING_COMMON_TRAJECTORY_DISCRETIZED_TRAJECTORY_H
+#ifndef MODULES_PLANNING_COMMON_TRAJECTORY_DISCRETIZED_TRAJECTORY_H_
+#define MODULES_PLANNING_COMMON_TRAJECTORY_DISCRETIZED_TRAJECTORY_H_
 
 #include <vector>
 
-#include "glog/logging.h"
+#include "modules/planning/proto/planning.pb.h"
+
 #include "modules/common/math/vec2d.h"
 #include "modules/planning/common/trajectory/trajectory.h"
 
@@ -34,8 +35,13 @@ class DiscretizedTrajectory : public Trajectory {
  public:
   DiscretizedTrajectory() = default;
 
+  /**
+   * Create a DiscretizedTrajectory based on protobuf message
+   */
+  explicit DiscretizedTrajectory(const ADCTrajectory& trajectory);
+
   explicit DiscretizedTrajectory(
-      std::vector<common::TrajectoryPoint> trajectory_points);
+      const std::vector<common::TrajectoryPoint>& trajectory_points);
 
   virtual ~DiscretizedTrajectory() = default;
 
@@ -78,4 +84,4 @@ class DiscretizedTrajectory : public Trajectory {
 }  // namespace planning
 }  // namespace apollo
 
-#endif  // MODULES_PLANNING_COMMON_TRAJECTORY_DISCRETIZED_TRAJECTORY_H
+#endif  // MODULES_PLANNING_COMMON_TRAJECTORY_DISCRETIZED_TRAJECTORY_H_

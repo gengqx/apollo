@@ -17,6 +17,7 @@
 #include "modules/common/adapters/adapter.h"
 
 #include <string>
+#include <cmath>
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "modules/common/adapters/adapter_gflags.h"

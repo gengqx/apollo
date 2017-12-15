@@ -39,6 +39,9 @@ class Planning:
         self.traj_acc_history_len = 30
         self.traj_acc_t_history = []
         self.traj_acc_a_history = []
+        self.traj_path_history_len = 30
+        self.traj_path_x_history = []
+        self.traj_path_y_history = []
 
         self.st_data_lock = threading.Lock()
         self.st_curve_s = {}
@@ -201,11 +204,16 @@ class Planning:
             st_speed_constraint_s[st_graph.name] = []
             st_speed_constraint_lower[st_graph.name] = []
             st_speed_constraint_upper[st_graph.name] = []
-            for speed_constraint in st_graph.speed_constraint:
-                interp_s = np.interp(speed_constraint.t, st_curve_t[st_graph.name], st_curve_s[st_graph.name])
-                st_speed_constraint_s[st_graph.name].append(interp_s)
-                st_speed_constraint_lower[st_graph.name].append(speed_constraint.lower_bound)
-                st_speed_constraint_upper[st_graph.name].append(speed_constraint.upper_bound)
+
+            speed_constraint = st_graph.speed_constraint
+            interp_s_set = []
+            for t in speed_constraint.t:
+                interp_s = np.interp(t, st_curve_t[st_graph.name],
+                                     st_curve_s[st_graph.name])
+                interp_s_set.append(interp_s)
+            st_speed_constraint_s[st_graph.name].extend(interp_s_set)
+            st_speed_constraint_lower[st_graph.name].extend(speed_constraint.lower_bound)
+            st_speed_constraint_upper[st_graph.name].extend(speed_constraint.upper_bound)
 
             kernel_cruise_t[st_graph.name] = []
             kernel_cruise_s[st_graph.name] = []
@@ -246,14 +254,17 @@ class Planning:
         traj_speed_v = []
         traj_acc_t = []
         traj_acc_a = []
+        traj_path_x = []
+        traj_path_y = []
         base_time = self.planning_pb.header.timestamp_sec
         for trajectory_point in self.planning_pb.trajectory_point:
             traj_acc_t.append(base_time + trajectory_point.relative_time)
             traj_acc_a.append(trajectory_point.a)
-
-        for trajectory_point in self.planning_pb.trajectory_point:
             traj_speed_t.append(base_time + trajectory_point.relative_time)
             traj_speed_v.append(trajectory_point.v)
+            traj_path_x.append(trajectory_point.path_point.x)
+            traj_path_y.append(trajectory_point.path_point.y)
+
 
         self.traj_data_lock.acquire()
         
@@ -276,6 +287,16 @@ class Planning:
             self.traj_acc_a_history = \
                 self.traj_acc_a_history[len(self.traj_acc_a_history)
                                           - self.traj_acc_history_len:]
+
+        self.traj_path_x_history.append(traj_path_x)
+        self.traj_path_y_history.append(traj_path_y)
+        if len(self.traj_path_x_history) > self.traj_path_history_len:
+            self.traj_path_x_history = \
+                self.traj_path_x_history[len(self.traj_path_x_history)
+                                        - self.traj_path_history_len:]
+            self.traj_path_y_history = \
+                self.traj_path_y_history[len(self.traj_path_y_history)
+                                        - self.traj_path_history_len:]
 
         self.traj_data_lock.release()
 

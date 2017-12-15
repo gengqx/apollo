@@ -17,13 +17,14 @@
 #include "modules/prediction/container/pose/pose_container.h"
 
 #include "modules/common/log.h"
+#include "modules/common/math/quaternion.h"
 
 namespace apollo {
 namespace prediction {
 
+using apollo::localization::LocalizationEstimate;
 using apollo::perception::PerceptionObstacle;
 using apollo::perception::Point;
-using apollo::localization::LocalizationEstimate;
 
 std::mutex PoseContainer::g_mutex_;
 
@@ -41,6 +42,7 @@ void PoseContainer::Update(
   } else if (!localization.has_pose()) {
     AERROR << "Localization message has no pose ["
            << localization.ShortDebugString() << "].";
+    return;
   } else if (!localization.pose().has_position() ||
              !localization.pose().has_linear_velocity()) {
     AERROR << "Localization message has no position or linear velocity ["
@@ -58,6 +60,20 @@ void PoseContainer::Update(
   position.set_y(localization.pose().position().y());
   position.set_z(localization.pose().position().z());
   obstacle_ptr_->mutable_position()->CopyFrom(position);
+
+  double theta = 0.0;
+  if (localization.pose().has_orientation() &&
+      localization.pose().orientation().has_qx() &&
+      localization.pose().orientation().has_qy() &&
+      localization.pose().orientation().has_qz() &&
+      localization.pose().orientation().has_qw()) {
+    double qw = localization.pose().orientation().qw();
+    double qx = localization.pose().orientation().qx();
+    double qy = localization.pose().orientation().qy();
+    double qz = localization.pose().orientation().qz();
+    theta = ::apollo::common::math::QuaternionToHeading(qw, qx, qy, qz);
+  }
+  obstacle_ptr_->set_theta(theta);
 
   Point velocity;
   velocity.set_x(localization.pose().linear_velocity().x());

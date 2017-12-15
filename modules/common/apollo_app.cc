@@ -18,44 +18,56 @@
 
 #include <csignal>
 #include <string>
+#include <vector>
 
 #include "gflags/gflags.h"
 #include "modules/common/log.h"
 #include "modules/common/status/status.h"
-#include "modules/hmi/utils/hmi_status_helper.h"
+#include "modules/common/util/string_util.h"
 
 #include "ros/include/ros/ros.h"
+
+DECLARE_string(log_dir);
 
 namespace apollo {
 namespace common {
 
-void ApolloApp::ReportModuleStatus(
-    const apollo::hmi::ModuleStatus::Status status) {
-  status_.set_name(Name());
-  status_.set_status(status);
-  hmi::HMIStatusHelper::ReportModuleStatus(status_);
+void ApolloApp::SetCallbackThreadNumber(uint32_t callback_thread_num) {
+  CHECK_GE(callback_thread_num, 1);
+  callback_thread_num_ = callback_thread_num;
+}
+
+void ApolloApp::ExportFlags() const {
+  const auto export_file = util::StrCat(FLAGS_log_dir, "/", Name(), ".flags");
+  std::ofstream fout(export_file);
+  CHECK(fout) << "Cannot open file " << export_file;
+
+  std::vector<gflags::CommandLineFlagInfo> flags;
+  gflags::GetAllFlags(&flags);
+  for (const auto &flag : flags) {
+    fout << "# " << flag.type << ", default=" << flag.default_value << "\n"
+         << "# " << flag.description << "\n"
+         << "--" << flag.name << "=" << flag.current_value << "\n"
+         << std::endl;
+  }
 }
 
 int ApolloApp::Spin() {
-  ros::AsyncSpinner spinner(1);
+  ros::AsyncSpinner spinner(callback_thread_num_);
   auto status = Init();
   if (!status.ok()) {
     AERROR << Name() << " Init failed: " << status;
-    ReportModuleStatus(apollo::hmi::ModuleStatus::UNINITIALIZED);
     return -1;
   }
-  ReportModuleStatus(apollo::hmi::ModuleStatus::INITIALIZED);
   status = Start();
   if (!status.ok()) {
     AERROR << Name() << " Start failed: " << status;
-    ReportModuleStatus(apollo::hmi::ModuleStatus::STOPPED);
     return -2;
   }
-  ReportModuleStatus(apollo::hmi::ModuleStatus::STARTED);
+  ExportFlags();
   spinner.start();
   ros::waitForShutdown();
   Stop();
-  ReportModuleStatus(apollo::hmi::ModuleStatus::STOPPED);
   AINFO << Name() << " exited.";
   return 0;
 }

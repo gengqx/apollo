@@ -30,6 +30,9 @@ npm-debug.log
 .settings
 .classpath
 
+# IntelliJ files
+.idea
+
 # Vscode files
 .vscode
 
@@ -62,6 +65,9 @@ data/core
 data/bag
 data/cov
 data/pcd
+modules/data/conf/task_info_template.pb.txt
+modules/tools/ota/update.ini
+modules/tools/ota/vehicle_info.pb.txt
 
 # Doxygen
 docs/doxygen
@@ -82,3 +88,6 @@ modules/drivers/gnss/conf/conf_us
 
 # calibration files
 modules/calibration/data/mkz056
+
+# Data bag
+docs/demo_guide/demo_1.5.np.bag

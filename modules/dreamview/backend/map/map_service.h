@@ -23,6 +23,10 @@
 
 #include <string>
 #include <vector>
+
+#include "boost/thread/locks.hpp"
+#include "boost/thread/shared_mutex.hpp"
+
 #include "modules/map/pnc_map/pnc_map.h"
 #include "third_party/json/json.hpp"
 
@@ -61,16 +65,13 @@ struct MapElementIds {
 
 class MapService {
  public:
-  explicit MapService(const std::string map_filename);
+  explicit MapService(bool use_sim_map = true);
 
-  MapService(const std::string &base_map_filename,
-             const std::string &sim_map_filename);
   MapElementIds CollectMapElementIds(const apollo::common::PointENU &point,
                                      double raidus) const;
 
-  bool GetPointsFromRouting(
-      const apollo::routing::RoutingResponse &routing,
-      std::vector<apollo::hdmap::MapPathPoint> *points) const;
+  bool GetPathsFromRouting(const apollo::routing::RoutingResponse &routing,
+                           std::vector<apollo::hdmap::Path> *paths) const;
 
   // The returned value is of a hdmap::Map proto. This
   // makes it easy to convert to a JSON object and to send to the
@@ -91,23 +92,30 @@ class MapService {
    * @param laneWayPoint RoutingRequest's lane waypoint
    * @return True if the lane waypoint is filled successfully.
    */
-  bool ConstructLaneWayPoint(
-      const double x, const double y,
-      routing::RoutingRequest::LaneWaypoint *laneWayPoint) const;
+  bool ConstructLaneWayPoint(const double x, const double y,
+                             routing::LaneWaypoint *laneWayPoint) const;
+
+  // Reload map from current FLAGS_map_dir.
+  bool ReloadMap(bool force_reload);
 
  private:
-  const hdmap::HDMap &BaseMap() const {
-    return pnc_map_.HDMap();
-  }
-
   bool GetNearestLane(const double x, const double y,
                       apollo::hdmap::LaneInfoConstPtr *nearest_lane,
                       double *nearest_s, double *nearest_l) const;
 
-  // A wrapper around HDMap to provide some convenient utils dreamview needs.
-  const hdmap::PncMap pnc_map_;
+  bool CreatePathsFromRouting(const routing::RoutingResponse &routing,
+                              std::vector<apollo::hdmap::Path> *paths) const;
+
+  bool AddPathFromPassageRegion(const routing::Passage &passage_region,
+                                std::vector<apollo::hdmap::Path> *paths) const;
+
+  const bool use_sim_map_;
+  const hdmap::HDMap *hdmap_ = nullptr;
   // A downsampled map for dreamview frontend display.
-  hdmap::HDMap sim_map_;
+  const hdmap::HDMap *sim_map_ = nullptr;
+
+  // RW lock to protect map data
+  mutable boost::shared_mutex mutex_;
 };
 
 }  // namespace dreamview

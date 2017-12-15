@@ -3,11 +3,10 @@ import "imports-loader?THREE=three!three/examples/js/controls/OrbitControls.js";
 
 import routingPointPin from "assets/images/routing/pin.png";
 
-
 import PARAMETERS from "store/config/parameters.yml";
-import WS from "store/websocket.js";
+import STORE from "store";
+import WS from "store/websocket";
 import { drawImage } from "utils/draw";
-
 
 export default class RoutingEditor {
     constructor() {
@@ -36,22 +35,11 @@ export default class RoutingEditor {
         this.removeAllRoutePoints(scene);
     }
 
-    addRoutingPoint(event, camera, ground, scene) {
-        const mouse = {
-            x:  (event.clientX / window.innerWidth) * 2 - 1,
-            y: -(event.clientY / window.innerHeight) * 2 + 1
-        };
-
-        const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(mouse, camera);
-
-        const intersects = raycaster.intersectObject(ground.mesh);
-        if (intersects.length > 0) {
-                const point = drawImage(routingPointPin, 3.5, 3.5,
-                                        intersects[0].point.x, intersects[0].point.y, 0.3);
-                this.routePoints.push(point);
-                scene.add(point);
-        }
+    addRoutingPoint(point, coordinates, scene) {
+        const offsetPoint = coordinates.applyOffset({x:point.x, y:point.y});
+        const pointMesh = drawImage(routingPointPin, 3.5, 3.5, offsetPoint.x, offsetPoint.y, 0.3);
+        this.routePoints.push(pointMesh);
+        scene.add(pointMesh);
     }
 
     removeLastRoutingPoint(scene) {
@@ -80,7 +68,7 @@ export default class RoutingEditor {
         this.routePoints = [];
     }
 
-    sendRoutingRequest(scene, carOffsetPosition, coordinates) {
+    sendRoutingRequest(carOffsetPosition, coordinates) {
         if (this.routePoints.length === 0) {
             alert("Please provide at least an end point.");
             return false;
@@ -91,23 +79,14 @@ export default class RoutingEditor {
             return coordinates.applyOffset(object.position, true);
         });
 
-        const start    = (this.routePoints.length > 1) ?
-                                points[0] : coordinates.applyOffset(carOffsetPosition, true);
-        const end      = (this.routePoints.length > 1) ? points[points.length-1] : points[0];
-        const waypoint = (this.routePoints.length > 1) ? points.slice(1,-1) : [];
+        const start    = (points.length > 1) ? points[0]
+                         : coordinates.applyOffset(carOffsetPosition, true);
+        const end      = points[points.length-1];
+        const waypoint = (points.length > 1) ? points.slice(1,-1) : [];
         WS.requestRoute(start, waypoint, end);
-
-        return true;
-    }
-
-    sendDefaultRoutingRequest(carOffsetPosition, coordinates) {
-        const start    = coordinates.applyOffset(carOffsetPosition, true);
-        const end      = undefined;
-        const waypoint = undefined;
-        WS.requestRoute(start, waypoint, end, true);
 
         return true;
     }
 }
 
-RoutingEditor.prototype.EDITING_MAP_RADIUS = 1000.0; //meters
+RoutingEditor.prototype.EDITING_MAP_RADIUS = 1500.0; //meters

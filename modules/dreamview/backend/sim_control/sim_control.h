@@ -44,10 +44,17 @@ namespace dreamview {
 class SimControl {
  public:
   /**
- * @brief Constructor of SimControl.
- * @param map_service the pointer of MapService.
- */
+   * @brief Constructor of SimControl.
+   * @param map_service the pointer of MapService.
+   */
   explicit SimControl(const MapService *map_service);
+
+  /**
+   * @brief setup callbacks and timer
+   * @param set_start_point initialize localization.
+   */
+  void Init(bool set_start_point, double start_velocity = 0.0,
+            double start_acceleration = 0.0);
 
   /**
    * @brief Starts the timer to publish simulated localization and chassis
@@ -59,6 +66,16 @@ class SimControl {
    * @brief Stops the timer.
    */
   void Stop();
+
+  /**
+   * @brief Clears the current received planning data.
+   */
+  void ClearPlanning();
+
+  /**
+   * @brief Publish simulated localization and chassis.
+   */
+  void RunOnce();
 
  private:
   void OnPlanning(const apollo::planning::ADCTrajectory &trajectory);
@@ -101,14 +118,25 @@ class SimControl {
   // Whether there's a planning received after the most recent routing.
   bool received_planning_;
 
-  // Whether it is the first time the SimControl gets started.
-  bool initial_start_;
+  // Number of planning received in terms of one RoutingResponse.
+  int planning_count_;
+
+  bool re_routing_triggered_;
 
   // Whether the sim control is enabled.
   bool enabled_;
 
+  // The header of the routing planning is following.
+  apollo::common::Header current_routing_header_;
+
   apollo::common::TrajectoryPoint prev_point_;
   apollo::common::TrajectoryPoint next_point_;
+
+  // Initial velocity and acceleration of the main vehicle
+  double start_velocity_ = 0.0;
+  double start_acceleration_ = 0.0;
+
+  static constexpr int kPlanningCountToStart = 5;
 
   FRIEND_TEST(SimControlTest, Test);
 };

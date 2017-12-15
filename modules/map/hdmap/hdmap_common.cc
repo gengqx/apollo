@@ -37,6 +37,9 @@ const double kSegmentationEpsilon = 0.2;
 // Minimum distance to remove duplicated points.
 const double kDuplicatedPointsEpsilon = 1e-7;
 
+// margin for comparation
+const double kEpsilon = 0.1;
+
 void RemoveDuplicates(std::vector<Vec2d> *points) {
   CHECK_NOTNULL(points);
 
@@ -184,18 +187,18 @@ void LaneInfo::GetWidth(const double s, double *left_width,
 }
 
 double LaneInfo::Heading(const double s) const {
-  CHECK(common::math::DoubleCompare(s, accumulated_s_.front()) >= 0)
+  const double kEpsilon = 0.001;
+  CHECK(s + kEpsilon >= accumulated_s_.front())
       << "s:" << s << " should be >= " << accumulated_s_.front();
-  CHECK(common::math::DoubleCompare(s, accumulated_s_.back()) <= 0)
-      << "s:" << s  << " should be <= " << accumulated_s_.back();
+  CHECK(s - kEpsilon <= accumulated_s_.back())
+      << "s:" << s << " should be <= " << accumulated_s_.back();
   auto iter = std::lower_bound(accumulated_s_.begin(), accumulated_s_.end(), s);
   int index = std::distance(accumulated_s_.begin(), iter);
   if (index == 0 || *iter - s <= common::math::kMathEpsilon) {
     return headings_[index];
   } else {
-    return common::math::slerp(
-        headings_[index - 1], accumulated_s_[index - 1], headings_[index],
-        accumulated_s_[index], s);
+    return common::math::slerp(headings_[index - 1], accumulated_s_[index - 1],
+                               headings_[index], accumulated_s_[index], s);
     // return headings_[index - 1];
   }
 }
@@ -248,7 +251,8 @@ bool LaneInfo::IsOnLane(const Vec2d &point) const {
     return false;
   }
 
-  if (accumulate_s > total_length() || accumulate_s < 0.0) {
+  if (accumulate_s > (total_length() + kEpsilon) ||
+              (accumulate_s + kEpsilon) < 0.0) {
     return false;
   }
 
@@ -417,14 +421,16 @@ void LaneInfo::UpdateOverlaps(const HDMapImpl &map_instance) {
       if (map_instance.GetJunctionById(object_map_id) != nullptr) {
         junctions_.emplace_back(overlap_ptr);
       }
-
-      // TODO(all): support parking and speed bump
+      if (map_instance.GetClearAreaById(object_map_id) != nullptr) {
+        clear_areas_.emplace_back(overlap_ptr);
+      }
+      if (map_instance.GetSpeedBumpById(object_map_id) != nullptr) {
+        speed_bumps_.emplace_back(overlap_ptr);
+      }
+      // TODO(all): support parking
       /*
       if (map_instance.get_parking_space_by_id(object_map_id) != nullptr) {
         parking_spaces_.emplace_back(overlap_ptr);
-      }
-      if (map_instance.get_speed_bump_by_id(object_map_id) != nullptr) {
-        speed_bumps_.emplace_back(overlap_ptr);
       }
       */
     }
@@ -501,6 +507,28 @@ void YieldSignInfo::Init() {
     SegmentsFromCurve(stop_line, &segments_);
   }
   // segments_from_curve(yield_sign_.stop_line(), &segments_);
+  CHECK(!segments_.empty());
+}
+
+ClearAreaInfo::ClearAreaInfo(const ClearArea &clear_area)
+    : clear_area_(clear_area) {
+  Init();
+}
+
+void ClearAreaInfo::Init() {
+  polygon_ = ConvertToPolygon2d(clear_area_.polygon());
+  CHECK_GT(polygon_.num_points(), 2);
+}
+
+SpeedBumpInfo::SpeedBumpInfo(const SpeedBump &speed_bump)
+    : speed_bump_(speed_bump) {
+  Init();
+}
+
+void SpeedBumpInfo::Init() {
+  for (const auto &stop_line : speed_bump_.position()) {
+    SegmentsFromCurve(stop_line, &segments_);
+  }
   CHECK(!segments_.empty());
 }
 

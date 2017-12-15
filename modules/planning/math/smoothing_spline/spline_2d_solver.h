@@ -21,6 +21,8 @@
 #ifndef MODULES_PLANNING_SMOOTHING_SPLINE_SPLINE_2D_SOLVER_H_
 #define MODULES_PLANNING_SMOOTHING_SPLINE_SPLINE_2D_SOLVER_H_
 
+#include <qpOASES.hpp>
+
 #include <memory>
 #include <vector>
 
@@ -34,7 +36,9 @@ namespace planning {
 
 class Spline2dSolver {
  public:
-  Spline2dSolver(const std::vector<double>& t_knots, const std::uint32_t order);
+  Spline2dSolver(const std::vector<double>& t_knots, const uint32_t order);
+
+  void Reset(const std::vector<double>& t_knots, const uint32_t order);
 
   // customize setup
   Spline2dConstraint* mutable_constraint();
@@ -51,7 +55,11 @@ class Spline2dSolver {
   Spline2d spline_;
   Spline2dKernel kernel_;
   Spline2dConstraint constraint_;
-  std::unique_ptr<apollo::common::math::QpSolver> qp_solver_ = nullptr;
+  std::unique_ptr<::qpOASES::SQProblem> sqp_solver_;
+
+  int last_num_constraint_ = 0;
+  int last_num_param_ = 0;
+  bool last_problem_success_ = false;
 };
 
 }  // namespace planning

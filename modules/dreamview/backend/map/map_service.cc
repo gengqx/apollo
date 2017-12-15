@@ -18,14 +18,15 @@
 
 #include <algorithm>
 
-#include "modules/common/util/points_downsampler.h"
+#include "modules/common/util/json_util.h"
 #include "modules/common/util/string_util.h"
+#include "modules/map/hdmap/hdmap_util.h"
 
 namespace apollo {
 namespace dreamview {
 
 using apollo::common::PointENU;
-using apollo::common::util::DownsampleByAngle;
+using apollo::common::util::JsonUtil;
 using apollo::hdmap::Map;
 using apollo::hdmap::Id;
 using apollo::hdmap::LaneInfoConstPtr;
@@ -34,8 +35,11 @@ using apollo::hdmap::JunctionInfoConstPtr;
 using apollo::hdmap::SignalInfoConstPtr;
 using apollo::hdmap::StopSignInfoConstPtr;
 using apollo::hdmap::YieldSignInfoConstPtr;
+using apollo::hdmap::HDMapUtil;
 using apollo::hdmap::Path;
-using apollo::hdmap::MapPathPoint;
+using apollo::hdmap::PncMap;
+using apollo::hdmap::RouteSegments;
+using apollo::hdmap::SimMapFile;
 using apollo::routing::RoutingResponse;
 using apollo::routing::RoutingRequest;
 
@@ -66,29 +70,17 @@ void ExtractOverlapIds(const std::vector<MapElementInfoConstPtr> &items,
   std::sort(ids->begin(), ids->end());
 }
 
-void ExtractStringVectorFromJson(const nlohmann::json &json_object,
-                                 const std::string &key,
-                                 std::vector<std::string> *result) {
-  auto iter = json_object.find(key);
-  if (iter != json_object.end()) {
-    result->reserve(iter->size());
-    for (size_t i = 0; i < iter->size(); ++i) {
-      result->push_back((*iter)[i]);
-    }
-  }
-}
-
 }  // namespace
 
 MapElementIds::MapElementIds(const nlohmann::json &json_object)
     : MapElementIds() {
-  ExtractStringVectorFromJson(json_object, "lane", &lane);
-  ExtractStringVectorFromJson(json_object, "crosswalk", &crosswalk);
-  ExtractStringVectorFromJson(json_object, "junction", &junction);
-  ExtractStringVectorFromJson(json_object, "signal", &signal);
-  ExtractStringVectorFromJson(json_object, "stopSign", &stop_sign);
-  ExtractStringVectorFromJson(json_object, "yield", &yield);
-  ExtractStringVectorFromJson(json_object, "overlap", &overlap);
+  JsonUtil::GetStringVectorFromJson(json_object, "lane", &lane);
+  JsonUtil::GetStringVectorFromJson(json_object, "crosswalk", &crosswalk);
+  JsonUtil::GetStringVectorFromJson(json_object, "junction", &junction);
+  JsonUtil::GetStringVectorFromJson(json_object, "signal", &signal);
+  JsonUtil::GetStringVectorFromJson(json_object, "stopSign", &stop_sign);
+  JsonUtil::GetStringVectorFromJson(json_object, "yield", &yield);
+  JsonUtil::GetStringVectorFromJson(json_object, "overlap", &overlap);
 }
 
 size_t MapElementIds::Hash() const {
@@ -116,40 +108,46 @@ nlohmann::json MapElementIds::Json() const {
   return result;
 }
 
-MapService::MapService(const std::string map_filename)
-    : MapService(map_filename, map_filename) {}
+MapService::MapService(bool use_sim_map) : use_sim_map_(use_sim_map) {
+  ReloadMap(false);
+}
 
-MapService::MapService(const std::string &base_map_filename,
-                       const std::string &sim_map_filename)
-    : pnc_map_(base_map_filename) {
-  CHECK(sim_map_.LoadMapFromFile(sim_map_filename) == 0)
-      << "Failed to load sim_map from " << sim_map_filename;
+bool MapService::ReloadMap(bool force_reload) {
+  boost::unique_lock<boost::shared_mutex> writer_lock(mutex_);
+  bool ret = true;
+  if (force_reload) {
+    ret = HDMapUtil::ReloadMaps();
+  }
+  hdmap_ = HDMapUtil::BaseMapPtr();
+  sim_map_ = use_sim_map_ ? HDMapUtil::SimMapPtr() : HDMapUtil::BaseMapPtr();
+  return ret;
 }
 
 MapElementIds MapService::CollectMapElementIds(const PointENU &point,
                                                double radius) const {
-  MapElementIds result;
+  boost::shared_lock<boost::shared_mutex> reader_lock(mutex_);
 
+  MapElementIds result;
   std::vector<LaneInfoConstPtr> lanes;
-  if (sim_map_.GetLanes(point, radius, &lanes) != 0) {
+  if (sim_map_->GetLanes(point, radius, &lanes) != 0) {
     AERROR << "Fail to get lanes from sim_map.";
   }
   ExtractIds(lanes, &result.lane);
 
   std::vector<CrosswalkInfoConstPtr> crosswalks;
-  if (sim_map_.GetCrosswalks(point, radius, &crosswalks) != 0) {
+  if (sim_map_->GetCrosswalks(point, radius, &crosswalks) != 0) {
     AERROR << "Fail to get crosswalks from sim_map.";
   }
   ExtractIds(crosswalks, &result.crosswalk);
 
   std::vector<JunctionInfoConstPtr> junctions;
-  if (sim_map_.GetJunctions(point, radius, &junctions) != 0) {
+  if (sim_map_->GetJunctions(point, radius, &junctions) != 0) {
     AERROR << "Fail to get junctions from sim_map.";
   }
   ExtractIds(junctions, &result.junction);
 
   std::vector<SignalInfoConstPtr> signals;
-  if (sim_map_.GetSignals(point, radius, &signals) != 0) {
+  if (sim_map_->GetSignals(point, radius, &signals) != 0) {
     AERROR << "Failed to get signals from sim_map.";
   }
 
@@ -157,13 +155,13 @@ MapElementIds MapService::CollectMapElementIds(const PointENU &point,
   ExtractOverlapIds(signals, &result.overlap);
 
   std::vector<StopSignInfoConstPtr> stop_signs;
-  if (sim_map_.GetStopSigns(point, radius, &stop_signs) != 0) {
+  if (sim_map_->GetStopSigns(point, radius, &stop_signs) != 0) {
     AERROR << "Failed to get stop signs from sim_map.";
   }
   ExtractIds(stop_signs, &result.stop_sign);
 
   std::vector<YieldSignInfoConstPtr> yield_signs;
-  if (sim_map_.GetYieldSigns(point, radius, &yield_signs) != 0) {
+  if (sim_map_->GetYieldSigns(point, radius, &yield_signs) != 0) {
     AERROR << "Failed to get yield signs from sim_map.";
   }
   ExtractIds(yield_signs, &result.yield);
@@ -172,12 +170,14 @@ MapElementIds MapService::CollectMapElementIds(const PointENU &point,
 }
 
 Map MapService::RetrieveMapElements(const MapElementIds &ids) const {
+  boost::shared_lock<boost::shared_mutex> reader_lock(mutex_);
+
   Map result;
   Id map_id;
 
   for (const auto &id : ids.lane) {
     map_id.set_id(id);
-    auto element = sim_map_.GetLaneById(map_id);
+    auto element = sim_map_->GetLaneById(map_id);
     if (element) {
       *result.add_lane() = element->lane();
     }
@@ -185,7 +185,7 @@ Map MapService::RetrieveMapElements(const MapElementIds &ids) const {
 
   for (const auto &id : ids.crosswalk) {
     map_id.set_id(id);
-    auto element = sim_map_.GetCrosswalkById(map_id);
+    auto element = sim_map_->GetCrosswalkById(map_id);
     if (element) {
       *result.add_crosswalk() = element->crosswalk();
     }
@@ -193,7 +193,7 @@ Map MapService::RetrieveMapElements(const MapElementIds &ids) const {
 
   for (const auto &id : ids.junction) {
     map_id.set_id(id);
-    auto element = sim_map_.GetJunctionById(map_id);
+    auto element = sim_map_->GetJunctionById(map_id);
     if (element) {
       *result.add_junction() = element->junction();
     }
@@ -201,7 +201,7 @@ Map MapService::RetrieveMapElements(const MapElementIds &ids) const {
 
   for (const auto &id : ids.signal) {
     map_id.set_id(id);
-    auto element = sim_map_.GetSignalById(map_id);
+    auto element = sim_map_->GetSignalById(map_id);
     if (element) {
       *result.add_signal() = element->signal();
     }
@@ -209,7 +209,7 @@ Map MapService::RetrieveMapElements(const MapElementIds &ids) const {
 
   for (const auto &id : ids.stop_sign) {
     map_id.set_id(id);
-    auto element = sim_map_.GetStopSignById(map_id);
+    auto element = sim_map_->GetStopSignById(map_id);
     if (element) {
       *result.add_stop_sign() = element->stop_sign();
     }
@@ -217,7 +217,7 @@ Map MapService::RetrieveMapElements(const MapElementIds &ids) const {
 
   for (const auto &id : ids.yield) {
     map_id.set_id(id);
-    auto element = sim_map_.GetYieldSignById(map_id);
+    auto element = sim_map_->GetYieldSignById(map_id);
     if (element) {
       *result.add_yield() = element->yield_sign();
     }
@@ -225,7 +225,7 @@ Map MapService::RetrieveMapElements(const MapElementIds &ids) const {
 
   for (const auto &id : ids.overlap) {
     map_id.set_id(id);
-    auto element = sim_map_.GetOverlapById(map_id);
+    auto element = sim_map_->GetOverlapById(map_id);
     if (element) {
       *result.add_overlap() = element->overlap();
     }
@@ -237,31 +237,24 @@ Map MapService::RetrieveMapElements(const MapElementIds &ids) const {
 bool MapService::GetNearestLane(const double x, const double y,
                                 LaneInfoConstPtr *nearest_lane,
                                 double *nearest_s, double *nearest_l) const {
+  boost::shared_lock<boost::shared_mutex> reader_lock(mutex_);
+
   PointENU point;
   point.set_x(x);
   point.set_y(y);
-  if (BaseMap().GetNearestLane(point, nearest_lane, nearest_s, nearest_l) < 0) {
+  if (hdmap_->GetNearestLane(point, nearest_lane, nearest_s, nearest_l) < 0) {
     AERROR << "Failed to get nearest lane!";
     return false;
   }
   return true;
 }
 
-bool MapService::GetPointsFromRouting(const RoutingResponse &routing,
-                                      std::vector<MapPathPoint> *points) const {
-  Path path;
-  if (!pnc_map_.CreatePathFromRouting(routing, &path)) {
-    AERROR << "Unable to get points from routing!";
+bool MapService::GetPathsFromRouting(const RoutingResponse &routing,
+                                     std::vector<Path> *paths) const {
+  if (!CreatePathsFromRouting(routing, paths)) {
+    AERROR << "Unable to get paths from routing!";
     return false;
   }
-
-  constexpr double angle_threshold = 0.1;  // threshold is about 5.72 degree.
-  std::vector<int> sampled_indices =
-      DownsampleByAngle(path.path_points(), angle_threshold);
-  for (int index : sampled_indices) {
-    points->push_back(path.path_points()[index]);
-  }
-
   return true;
 }
 
@@ -278,8 +271,7 @@ bool MapService::GetPoseWithRegardToLane(const double x, const double y,
 }
 
 bool MapService::ConstructLaneWayPoint(
-    const double x, const double y,
-    RoutingRequest::LaneWaypoint *laneWayPoint) const {
+    const double x, const double y, routing::LaneWaypoint *laneWayPoint) const {
   double s, l;
   LaneInfoConstPtr lane;
   if (!GetNearestLane(x, y, &lane, &s, &l)) {
@@ -304,6 +296,41 @@ bool MapService::GetStartPoint(apollo::common::PointENU *start_point) const {
   }
 
   *start_point = lane->GetSmoothPoint(0.0);
+  return true;
+}
+
+bool MapService::CreatePathsFromRouting(const RoutingResponse &routing,
+                                        std::vector<Path> *paths) const {
+  for (const auto &road : routing.road()) {
+    for (const auto &passage_region : road.passage()) {
+      // Each passage region in a road forms a path
+      if (!AddPathFromPassageRegion(passage_region, paths)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool MapService::AddPathFromPassageRegion(
+    const routing::Passage &passage_region, std::vector<Path> *paths) const {
+  boost::shared_lock<boost::shared_mutex> reader_lock(mutex_);
+
+  RouteSegments segments;
+  for (const auto &segment : passage_region.segment()) {
+    auto lane_ptr = hdmap_->GetLaneById(hdmap::MakeMapId(segment.id()));
+    if (!lane_ptr) {
+      AERROR << "Failed to find lane: " << segment.id();
+      return false;
+    }
+    segments.emplace_back(lane_ptr, segment.start_s(), segment.end_s());
+  }
+
+  paths->emplace_back();
+  if (!PncMap::CreatePathFromLaneSegments(segments, &paths->back())) {
+    return false;
+  }
+
   return true;
 }
 

@@ -27,7 +27,7 @@
 
 #include "modules/common/configs/proto/vehicle_config.pb.h"
 #include "modules/common/proto/pnc_point.pb.h"
-#include "modules/planning/proto/qp_spline_st_speed_config.pb.h"
+#include "modules/planning/proto/qp_st_speed_config.pb.h"
 
 #include "modules/common/status/status.h"
 #include "modules/common/util/string_util.h"
@@ -43,37 +43,38 @@ namespace planning {
 
 class QpSplineStGraph {
  public:
-  QpSplineStGraph(const QpSplineStSpeedConfig& qp_config,
+  QpSplineStGraph(Spline1dGenerator* spline_generator,
+                  const QpStSpeedConfig& qp_st_speed_config,
                   const apollo::common::VehicleParam& veh_param);
 
   void SetDebugLogger(planning_internal::STGraphDebug* st_graph_debug);
 
   common::Status Search(const StGraphData& st_graph_data,
-                        SpeedData* const speed_data,
-                        const std::pair<double, double>& accel_bound);
+                        const std::pair<double, double>& accel_bound,
+                        const SpeedData& reference_speed_data,
+                        SpeedData* const speed_data);
 
  private:
   void Init();
 
-  // apply st graph constraint
-  common::Status ApplyConstraint(const common::TrajectoryPoint& init_point,
-                                 const SpeedLimit& speed_limit,
-                                 const std::vector<StBoundary>& boundaries,
-                                 const std::pair<double, double>& accel_bound);
+  // Add st graph constraint
+  common::Status AddConstraint(const common::TrajectoryPoint& init_point,
+                               const SpeedLimit& speed_limit,
+                               const std::vector<const StBoundary*>& boundaries,
+                               const std::pair<double, double>& accel_bound);
 
-  // apply objective function
-  common::Status ApplyKernel(const std::vector<StBoundary>& boundaries,
-                             const SpeedLimit& speed_limit);
+  // Add objective function
+  common::Status AddKernel(const std::vector<const StBoundary*>& boundaries,
+                           const SpeedLimit& speed_limit);
 
   // solve
   common::Status Solve();
 
   // extract upper lower bound for constraint;
-  common::Status GetSConstraintByTime(const std::vector<StBoundary>& boundaries,
-                                      const double time,
-                                      const double total_path_s,
-                                      double* const s_upper_bound,
-                                      double* const s_lower_bound) const;
+  common::Status GetSConstraintByTime(
+      const std::vector<const StBoundary*>& boundaries, const double time,
+      const double total_path_s, double* const s_upper_bound,
+      double* const s_lower_bound) const;
 
   // generate reference speed profile
   // common::Status ApplyReferenceSpeedProfile();
@@ -81,21 +82,23 @@ class QpSplineStGraph {
                                               const double weight);
 
   common::Status AddFollowReferenceLineKernel(
-      const std::vector<StBoundary>& boundaries, const double weight);
+      const std::vector<const StBoundary*>& boundaries, const double weight);
 
   common::Status EstimateSpeedUpperBound(
       const common::TrajectoryPoint& init_point, const SpeedLimit& speed_limit,
       std::vector<double>* speed_upper_bound) const;
 
+  bool AddDpStReferenceKernel(const double weight) const;
+
  private:
+  // solver
+  Spline1dGenerator* spline_generator_ = nullptr;
+
   // qp st configuration
-  QpSplineStSpeedConfig qp_spline_st_speed_config_;
+  const QpStSpeedConfig qp_st_speed_config_;
 
   // initial status
   common::TrajectoryPoint init_point_;
-
-  // solver
-  std::unique_ptr<Spline1dGenerator> spline_generator_ = nullptr;
 
   // t knots resolution
   double t_knots_resolution_ = 0.0;
@@ -111,6 +114,9 @@ class QpSplineStGraph {
 
   // reference line kernel
   std::vector<double> cruise_;
+
+  // reference st points from dp optimizer
+  std::vector<common::SpeedPoint> reference_dp_speed_points_;
 
   planning_internal::STGraphDebug* st_graph_debug_ = nullptr;
 };

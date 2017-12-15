@@ -27,7 +27,6 @@
 #include "modules/planning/proto/st_boundary_config.pb.h"
 
 #include "modules/common/status/status.h"
-#include "modules/map/pnc_map/pnc_map.h"
 #include "modules/planning/common/path/path_data.h"
 #include "modules/planning/common/path_decision.h"
 #include "modules/planning/common/speed/st_boundary.h"
@@ -39,8 +38,7 @@ namespace planning {
 
 class StBoundaryMapper {
  public:
-  StBoundaryMapper(const hdmap::PncMap* pnc_map,
-                   const SLBoundary& adc_sl_boundary,
+  StBoundaryMapper(const SLBoundary& adc_sl_boundary,
                    const StBoundaryConfig& config,
                    const ReferenceLine& reference_line,
                    const PathData& path_data, const double planning_distance,
@@ -48,9 +46,7 @@ class StBoundaryMapper {
 
   virtual ~StBoundaryMapper() = default;
 
-  apollo::common::Status GetGraphBoundary(
-      const PathDecision& path_decision,
-      std::vector<StBoundary>* const boundary) const;
+  apollo::common::Status GetGraphBoundary(PathDecision* path_decision) const;
 
   virtual apollo::common::Status GetSpeedLimits(
       SpeedLimit* const speed_limit_data) const;
@@ -61,29 +57,29 @@ class StBoundaryMapper {
                     const apollo::common::math::Box2d& obs_box,
                     const double buffer) const;
 
+  /**
+   * Creates valid st boundary upper_points and lower_points
+   * If return true, upper_points.size() > 1 and
+   * upper_points.size() = lower_points.size()
+   */
   bool GetOverlapBoundaryPoints(
       const std::vector<apollo::common::PathPoint>& path_points,
       const Obstacle& obstacle, std::vector<STPoint>* upper_points,
       std::vector<STPoint>* lower_points) const;
 
-  apollo::common::Status MapWithoutDecision(const PathObstacle& path_obstacle,
-                                            StBoundary* const boundary) const;
+  apollo::common::Status MapWithoutDecision(PathObstacle* path_obstacle) const;
 
-  bool MapStopDecision(const PathObstacle& stop_obstacle,
-                       const ObjectDecisionType& stop_decision,
-                       StBoundary* const boundary) const;
+  bool MapStopDecision(PathObstacle* stop_obstacle) const;
 
   apollo::common::Status MapWithPredictionTrajectory(
-      const PathObstacle& path_obstacle, const ObjectDecisionType& obj_decision,
-      StBoundary* const boundary) const;
-
-  void AppendBoundary(const StBoundary& boundary,
-                      std::vector<StBoundary>* st_boundaries) const;
+      PathObstacle* path_obstacle) const;
 
   double GetCentricAccLimit(const double kappa) const;
 
+  void GetAvgKappa(const std::vector<common::PathPoint>& path_points,
+                   std::vector<double>* kappa) const;
+
  private:
-  const hdmap::PncMap* pnc_map_ = nullptr;
   const SLBoundary& adc_sl_boundary_;
   StBoundaryConfig st_boundary_config_;
   const ReferenceLine& reference_line_;

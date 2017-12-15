@@ -34,10 +34,11 @@
 namespace apollo {
 namespace prediction {
 
-using apollo::hdmap::LaneInfo;
-using apollo::hdmap::Id;
-using apollo::hdmap::MapPathPoint;
 using apollo::hdmap::HDMapUtil;
+using apollo::hdmap::Id;
+using apollo::hdmap::JunctionInfo;
+using apollo::hdmap::LaneInfo;
+using apollo::hdmap::MapPathPoint;
 
 PredictionMap::PredictionMap() {}
 
@@ -129,6 +130,16 @@ void PredictionMap::OnLane(
   }
 }
 
+bool PredictionMap::NearJunction(const Eigen::Vector2d& point,
+                                 const double radius) {
+  common::PointENU hdmap_point;
+  hdmap_point.set_x(point[0]);
+  hdmap_point.set_y(point[1]);
+  std::vector<std::shared_ptr<const JunctionInfo>> junctions;
+  HDMapUtil::BaseMap().GetJunctions(hdmap_point, radius, &junctions);
+  return junctions.size() > 0;
+}
+
 double PredictionMap::PathHeading(std::shared_ptr<const LaneInfo> lane_info,
                                   const common::PointENU& point) {
   common::math::Vec2d vec_point = {point.x(), point.y()};
@@ -174,8 +185,7 @@ void PredictionMap::NearbyLanesByCurrentLanes(
         double s = -1.0;
         double l = 0.0;
         GetProjection(point, nearby_lane, &s, &l);
-        if (common::math::DoubleCompare(s, 0.0) >= 0 &&
-            common::math::DoubleCompare(std::fabs(l), radius) > 0) {
+        if (s >= 0.0 && std::fabs(l) > radius) {
           continue;
         }
         lane_ids.insert(id);
@@ -190,8 +200,7 @@ void PredictionMap::NearbyLanesByCurrentLanes(
         double s = -1.0;
         double l = 0.0;
         GetProjection(point, nearby_lane, &s, &l);
-        if (common::math::DoubleCompare(s, 0.0) >= 0 &&
-            common::math::DoubleCompare(std::fabs(l), radius) > 0) {
+        if (s >= 0.0 && std::fabs(l) > radius) {
           continue;
         }
         lane_ids.insert(id);

@@ -1,10 +1,12 @@
 import * as THREE from "three";
-import "imports-loader?THREE=three!three/examples/js/controls/OrbitControls.js";
+import OrbitControls from "three/examples/js/controls/OrbitControls.js";
+import Stats from "stats.js";
 
 import PARAMETERS from "store/config/parameters.yml";
 import Coordinates from "renderer/coordinates";
 import AutoDrivingCar from "renderer/adc";
 import Ground from "renderer/ground";
+import TileGround from "renderer/tileground";
 import Map from "renderer/map";
 import PlanningTrajectory from "renderer/trajectory.js";
 import PerceptionObstacles from "renderer/obstacles.js";
@@ -12,7 +14,8 @@ import Decision from "renderer/decision.js";
 import Prediction from "renderer/prediction.js";
 import Routing from "renderer/routing.js";
 import RoutingEditor from "renderer/routing_editor.js";
-import Stats from "stats.js";
+
+const _ = require('lodash');
 
 class Renderer {
     constructor() {
@@ -24,10 +27,17 @@ class Renderer {
             antialias: useAntialias
         });
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x031C31);
+        this.scene.background = new THREE.Color(0x14171A);
 
-        // The ground. (grid for now)
-        this.ground = new Ground();
+        // The dimension of the scene
+        this.dimension = {
+            width: 0,
+            height: 0,
+        };
+
+        // The ground.
+        this.ground = (PARAMETERS.ground.type === 'tile' || OFFLINE_PLAYBACK)
+                      ? new TileGround() : new Ground();
 
         // The map.
         this.map = new Map();
@@ -66,6 +76,9 @@ class Renderer {
             this.stats.domElement.style.bottom = '0px';
             document.body.appendChild(this.stats.domElement);
         }
+
+        // Geolocation of the mouse
+        this.geolocation = {x: 0, y:0};
     }
 
     initialize(canvasId, width, height, options) {
@@ -122,6 +135,9 @@ class Renderer {
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(width, height);
+
+        this.dimension.width = width;
+        this.dimension.height = height;
     }
 
     enableOrbitControls() {
@@ -203,6 +219,13 @@ class Renderer {
 
             this.controls.enabled = false;
             break;
+        case "Monitor":
+            this.camera.position.set(target.position.x, target.position.y, 50);
+            this.camera.up.set(0, 1, 0);
+            this.camera.lookAt(target.position.x, target.position.y, 0);
+
+            this.controls.enabled = false;
+            break;
         case "Map":
             if (!this.controls.enabled) {
                 this.enableOrbitControls();
@@ -229,6 +252,12 @@ class Renderer {
                                                                    false);
     }
 
+    addDefaultEndPoint(points) {
+        for (let i = 0; i < points.length; i++) {
+            this.routingEditor.addRoutingPoint(points[i], this.coordinates, this.scene);
+        }
+    }
+
     removeAllRoutingPoints() {
         this.routingEditor.removeAllRoutePoints(this.scene);
     }
@@ -237,15 +266,9 @@ class Renderer {
         this.routingEditor.removeLastRoutingPoint(this.scene);
     }
 
-    sendRoutingRequest(sendDefaultRoute = false) {
-        if (sendDefaultRoute) {
-            return this.routingEditor.sendDefaultRoutingRequest(this.adc.mesh.position,
-                                                         this.coordinates);
-        } else {
-            return this.routingEditor.sendRoutingRequest(this.Scene,
-                                                  this.adc.mesh.position,
-                                                  this.coordinates);
-        }
+    sendRoutingRequest() {
+        return this.routingEditor.sendRoutingRequest(this.adc.mesh.position,
+                                                     this.coordinates);
     }
 
     editRoute(event) {
@@ -258,7 +281,8 @@ class Renderer {
             return;
         }
 
-        this.routingEditor.addRoutingPoint(event, this.camera, this.ground, this.scene);
+        const point = this.getGeolocation(event);
+        this.routingEditor.addRoutingPoint(point, this.coordinates, this.scene);
     }
 
     // Render one frame. This supports the main draw/render loop.
@@ -284,7 +308,7 @@ class Renderer {
 
         // Upon the first time in render() it sees ground mesh loaded,
         // added it to the scene.
-        if (!this.ground.initialized) {
+        if (this.ground.type === "default" && !this.ground.initialized) {
             this.ground.initialize(this.coordinates);
             this.ground.mesh.name = "ground";
             this.scene.add(this.ground.mesh);
@@ -305,13 +329,18 @@ class Renderer {
         this.render();
     }
 
-    updateWorld(world) {
+    updateWorld(world, planningData) {
         this.adc.update(world, this.coordinates);
-        this.planningTrajectory.update(world, this.coordinates, this.scene);
+        this.ground.update(world, this.coordinates, this.scene);
+        this.planningTrajectory.update(world, planningData, this.coordinates, this.scene);
         this.perceptionObstacles.update(world, this.coordinates, this.scene);
         this.decision.update(world, this.coordinates, this.scene);
         this.prediction.update(world, this.coordinates, this.scene);
         this.routing.update(world, this.coordinates, this.scene);
+    }
+
+    updateGroundMetadata(serverUrl, mapInfo) {
+        this.ground.initialize(serverUrl, mapInfo);
     }
 
     updateMap(newData) {
@@ -331,6 +360,28 @@ class Renderer {
             || navigator.userAgent.match(/iPhone/i)
             || navigator.userAgent.match(/iPad/i)
             || navigator.userAgent.match(/iPod/i);
+    }
+
+    getGeolocation(event) {
+        if (!this.coordinates.isInitialized()) {
+            return;
+        }
+
+        const canvasPosition = event.currentTarget.getBoundingClientRect();
+
+        const vector = new THREE.Vector3(
+            ((event.clientX - canvasPosition.left) / this.dimension.width) * 2 - 1,
+            -((event.clientY - canvasPosition.top) / this.dimension.height) * 2 + 1,
+            0);
+
+        vector.unproject(this.camera);
+
+        const direction = vector.sub(this.camera.position).normalize();
+        const distance = -this.camera.position.z / direction.z;
+        const pos = this.camera.position.clone().add(direction.multiplyScalar(distance));
+        const geo = this.coordinates.applyOffset(pos, true);
+
+        return geo;
     }
 }
 

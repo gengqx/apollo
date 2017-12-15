@@ -19,14 +19,15 @@
  * @brief Some util functions.
  */
 
-#ifndef MODULES_COMMON_UTIL_H_
-#define MODULES_COMMON_UTIL_H_
+#ifndef MODULES_COMMON_UTIL_UTIL_H_
+#define MODULES_COMMON_UTIL_UTIL_H_
 
 #include <algorithm>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "google/protobuf/util/message_differencer.h"
 
@@ -53,6 +54,18 @@ bool IsProtoEqual(const ProtoA& a, const ProtoB& b) {
   return google::protobuf::util::MessageDifferencer::Equals(a, b);
 }
 
+struct PairHash {
+  template <typename T, typename U>
+  size_t operator()(const std::pair<T, U>& pair) const {
+    return std::hash<T>()(pair.first) ^ std::hash<U>()(pair.second);
+  }
+};
+
+template <typename T>
+bool WithinBound(T start, T end, T value) {
+  return value >= start && value <= end;
+}
+
 /**
  * @brief create a SL point
  * @param s the s value
@@ -60,6 +73,11 @@ bool IsProtoEqual(const ProtoA& a, const ProtoB& b) {
  * @return a SLPoint instance
  */
 SLPoint MakeSLPoint(const double s, const double l);
+
+template <typename T>
+common::math::Vec2d MakeVec2d(const T& t) {
+  return common::math::Vec2d(t.x(), t.y());
+}
 
 PointENU MakePointENU(const double x, const double y, const double z);
 
@@ -75,6 +93,14 @@ PathPoint MakePathPoint(const double x, const double y, const double z,
                         const double theta, const double kappa,
                         const double dkappa, const double ddkappa);
 
+/**
+ * uniformly slice a segment [start, end] to num + 1 pieces
+ * the result sliced will contain the n + 1 points that slices the provided
+ * segment. `start` and `end` will be the first and last element in `sliced`.
+ */
+void uniform_slice(double start, double end, uint32_t num,
+                   std::vector<double>* sliced);
+
 template <typename Container>
 typename Container::value_type MaxElement(const Container& elements) {
   return *std::max_element(elements.begin(), elements.end());
@@ -86,13 +112,31 @@ typename Container::value_type MinElement(const Container& elements) {
 }
 
 /**
- * calculate the distance beteween PathPoint a and PathPoint b
- * @param a one path point
- * @param b another path point
- * @return sqrt((a.x-b.x)^2 + (a.y-b.y)^2), i.e., the Euclid distance on XY
- * dimension
+ * calculate the distance beteween Point u and Point v, which are all have
+ * member function x() and y() in XY dimension.
+ * @param u one point that has member function x() and y().
+ * @param b one point that has member function x() and y().
+ * @return sqrt((u.x-v.x)^2 + (u.y-v.y)^2), i.e., the Euclid distance on XY
+ * dimension.
  */
-double Distance2D(const PathPoint& a, const PathPoint& b);
+template <typename U, typename V>
+double DistanceXY(const U& u, const V& v) {
+  return std::hypot(u.x() - v.x(), u.y() - v.y());
+}
+
+/**
+ * Check if two points u and v are the same point on XY dimension.
+ * @param u one point that has member function x() and y().
+ * @param v one point that has member function x() and y().
+ * @return sqrt((u.x-v.x)^2 + (u.y-v.y)^2) < epsilon, i.e., the Euclid distance
+ * on XY dimension.
+ */
+template <typename U, typename V>
+bool SamePointXY(const U& u, const V& v) {
+  constexpr double kMathEpsilonSqr = 1e-8 * 1e-8;
+  return (u.x() - v.x()) * (u.x() - v.x()) < kMathEpsilonSqr &&
+         (u.y() - v.y()) * (u.y() - v.y()) < kMathEpsilonSqr;
+}
 
 }  // namespace util
 }  // namespace common
@@ -103,4 +147,4 @@ std::ostream& operator<<(std::ostream& os, std::pair<A, B>& p) {
   return os << "first: " << p.first << ", second: " << p.second;
 }
 
-#endif  // MODULES_COMMON_UTIL_H_
+#endif  // MODULES_COMMON_UTIL_UTIL_H_
