@@ -34,20 +34,27 @@ class ModestRadarDetector : public BaseRadarDetector {
 
   bool Init() override;
 
+  // @brief: Radar raw obstacles -> objects.
+  // @param [in]: raw obstacles from radar driver.
+  // @param [in]: roi map polygons, using world frame.
+  // @param [in]: options.
+  // @param [out]: transformed objects.
+  // return true if detect successfully, otherwise return false
   bool Detect(const ContiRadar &raw_obstacles,
               const std::vector<PolygonDType> &map_polygons,
               const RadarDetectorOptions &options,
               std::vector<ObjectPtr> *objects) override;
 
+  // @brief: collect radar result
+  // @param [out]: radar objects
+  // @return collection state
   bool CollectRadarResult(std::vector<ObjectPtr> *objects);
 
-  std::string name() const override {
-    return "ModestRadarDetector";
-  }
+  std::string name() const override { return "ModestRadarDetector"; }
 
  private:
   void RoiFilter(const std::vector<PolygonDType> &map_polygons,
-                 std::vector<ObjectPtr>* filter_objects);
+                 std::vector<ObjectPtr> *filter_objects);
 
   // for unit test
   bool result_init_ = true;

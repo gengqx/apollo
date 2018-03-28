@@ -28,7 +28,6 @@
 #include <vector>
 
 #include "ros/include/ros/ros.h"
-#include "tf2_ros/transform_broadcaster.h"
 
 #include "modules/localization/proto/gps.pb.h"
 #include "modules/localization/proto/imu.pb.h"
@@ -36,7 +35,8 @@
 
 #include "glog/logging.h"
 #include "gtest/gtest_prod.h"
-#include "modules/common/monitor/monitor.h"
+
+#include "modules/common/monitor_log/monitor_log_buffer.h"
 #include "modules/common/status/status.h"
 #include "modules/localization/localization_base.h"
 
@@ -72,7 +72,6 @@ class RTKLocalization : public LocalizationBase {
  private:
   void OnTimer(const ros::TimerEvent &event);
   void PublishLocalization();
-  void PublishPoseBroadcastTF(const LocalizationEstimate &localization);
   void RunWatchDog();
 
   void PrepareLocalizationMsg(LocalizationEstimate *localization);
@@ -80,15 +79,14 @@ class RTKLocalization : public LocalizationBase {
                               const localization::Imu &imu,
                               LocalizationEstimate *localization);
   bool FindMatchingIMU(const double gps_timestamp_sec, Imu *imu_msg);
-  void InterpolateIMU(const Imu &imu1, const Imu &imu2,
+  bool InterpolateIMU(const Imu &imu1, const Imu &imu2,
                       const double timestamp_sec, Imu *msgbuf);
   template <class T>
   T InterpolateXYZ(const T &p1, const T &p2, const double &frac1);
 
  private:
   ros::Timer timer_;
-  tf2_ros::TransformBroadcaster *tf2_broadcaster_ = nullptr;
-  apollo::common::monitor::Monitor monitor_;
+  apollo::common::monitor::MonitorLogger monitor_logger_;
   const std::vector<double> map_offset_;
   double last_received_timestamp_sec_ = 0.0;
   double last_reported_timestamp_sec_ = 0.0;

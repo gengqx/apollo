@@ -85,7 +85,9 @@ LatController::LatController() : name_("LQR-based Lateral Controller") {
   AINFO << "Using " << name_;
 }
 
-LatController::~LatController() { CloseLogFile(); }
+LatController::~LatController() {
+  CloseLogFile();
+}
 
 bool LatController::LoadControlConf(const ControlConf *control_conf) {
   if (!control_conf) {
@@ -120,6 +122,8 @@ bool LatController::LoadControlConf(const ControlConf *control_conf) {
 
   lqr_eps_ = control_conf->lat_controller_conf().eps();
   lqr_max_iteration_ = control_conf->lat_controller_conf().max_iteration();
+
+  query_relative_time_ = control_conf->query_relative_time();
 
   return true;
 }
@@ -159,18 +163,13 @@ void LatController::InitializeFilters(const ControlConf *control_conf) {
   // Low pass filter
   std::vector<double> den(3, 0.0);
   std::vector<double> num(3, 0.0);
-  LpfCoefficients(ts_, control_conf->lat_controller_conf().cutoff_freq(), &den,
-                  &num);
+  common::LpfCoefficients(
+      ts_, control_conf->lat_controller_conf().cutoff_freq(), &den, &num);
   digital_filter_.set_coefficients(den, num);
-  // Mean filters
-  /**
-  heading_rate_filter_ = MeanFilter(
+  lateral_error_filter_ = common::MeanFilter(
       control_conf->lat_controller_conf().mean_filter_window_size());
-  **/
-  lateral_error_filter_ =
-      MeanFilter(control_conf->lat_controller_conf().mean_filter_window_size());
-  heading_error_filter_ =
-      MeanFilter(control_conf->lat_controller_conf().mean_filter_window_size());
+  heading_error_filter_ = common::MeanFilter(
+      control_conf->lat_controller_conf().mean_filter_window_size());
 }
 
 Status LatController::Init(const ControlConf *control_conf) {
@@ -258,9 +257,13 @@ void LatController::LoadLatGainScheduler(
       << "Fail to load heading error gain scheduler";
 }
 
-void LatController::Stop() { CloseLogFile(); }
+void LatController::Stop() {
+  CloseLogFile();
+}
 
-std::string LatController::Name() const { return name_; }
+std::string LatController::Name() const {
+  return name_;
+}
 
 Status LatController::ComputeControlCommand(
     const localization::LocalizationEstimate *localization,
@@ -377,7 +380,7 @@ Status LatController::Reset() {
 }
 
 void LatController::UpdateStateAnalyticalMatching(SimpleLateralDebug *debug) {
-  if (FLAGS_use_relative_position) {
+  if (FLAGS_use_navigation_mode) {
     ComputeLateralErrors(0.0, 0.0, VehicleStateProvider::instance()->heading(),
                          VehicleStateProvider::instance()->linear_velocity(),
                          VehicleStateProvider::instance()->angular_velocity(),
@@ -498,9 +501,9 @@ void LatController::ComputeLateralErrors(
     SimpleLateralDebug *debug) {
   // TODO(QiL): change this to conf.
   TrajectoryPoint target_point;
-  if (FLAGS_use_relative_position) {
+  if (FLAGS_use_navigation_mode) {
     target_point = trajectory_analyzer.QueryNearestPointByRelativeTime(
-        FLAGS_query_relative_time);
+        query_relative_time_);
   } else {
     target_point = trajectory_analyzer.QueryNearestPointByPosition(x, y);
   }
@@ -509,7 +512,7 @@ void LatController::ComputeLateralErrors(
   const double dy = y - target_point.path_point().y();
 
   ADEBUG << "x point: " << x << " y point: " << y;
-  ADEBUG << "math point x: " << target_point.path_point().x()
+  ADEBUG << "match point x: " << target_point.path_point().x()
          << " y point: " << target_point.path_point().y();
 
   const double cos_matched_theta = std::cos(target_point.path_point().theta());
@@ -520,7 +523,7 @@ void LatController::ComputeLateralErrors(
   // TODO(QiL): Code reformat when done with test
   const double raw_lateral_error =
       cos_matched_theta * dy - sin_matched_theta * dx;
-  if (FLAGS_use_relative_position) {
+  if (FLAGS_use_navigation_mode) {
     double filtered_lateral_error =
         lateral_error_filter_.Update(raw_lateral_error);
     debug->set_lateral_error(filtered_lateral_error);
@@ -534,7 +537,7 @@ void LatController::ComputeLateralErrors(
   // theta_error = delta_theta
   // TODO(QiL): Code reformat after test
   debug->set_lateral_error_rate(linear_v * sin_delta_theta);
-  if (FLAGS_use_relative_position) {
+  if (FLAGS_use_navigation_mode) {
     debug->set_heading_error(heading_error_filter_.Update(delta_theta));
   } else {
     debug->set_heading_error(delta_theta);
@@ -542,8 +545,8 @@ void LatController::ComputeLateralErrors(
 
   // theta_error_dot = angular_v - target_point.path_point().kappa() *
   // target_point.v();
-  debug->set_heading_error_rate(
-      angular_v - target_point.path_point().kappa() * target_point.v());
+  debug->set_heading_error_rate(angular_v - target_point.path_point().kappa() *
+                                                target_point.v());
 
   // matched_theta = 3.path_point().theta();
   debug->set_ref_heading(target_point.path_point().theta());

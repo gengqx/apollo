@@ -15,7 +15,7 @@
  *****************************************************************************/
 
 /**
- * @file speed_optimizer.h
+ * @file
  **/
 
 #ifndef MODULES_PLANNING_TASKS_SPEED_OPTIMIZER_H_
@@ -47,11 +47,8 @@ class SpeedOptimizer : public Task {
       const SpeedData& reference_speed_data, PathDecision* const path_decision,
       SpeedData* const speed_data) = 0;
 
-  SpeedData GenerateStopProfile(const double init_speed,
-                                const double init_acc) const;
-
   void RecordSTGraphDebug(const StGraphData& st_graph_data,
-                          planning_internal::STGraphDebug* stGraphDebug);
+                          planning_internal::STGraphDebug* stGraphDebug) const;
 
   void RecordDebugInfo(const SpeedData& speed_data);
 };

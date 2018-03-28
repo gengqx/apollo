@@ -56,8 +56,8 @@
 #include <vector>
 
 #include "modules/common/macro.h"
+#include "modules/perception/common/pcl_types.h"
 #include "modules/perception/lib/base/registerer.h"
-#include "modules/perception/lib/pcl_util/pcl_types.h"
 #include "modules/perception/obstacle/base/object.h"
 #include "modules/perception/obstacle/base/types.h"
 
@@ -68,11 +68,11 @@ class BaseFusion {
   BaseFusion() {}
   virtual ~BaseFusion() {}
   virtual bool Init() = 0;
-  /**
-   * @brief: fuse objects from multi sensors(64-lidar, 16-lidar, radar...)
-   * @param [in]: multi sensor objects.
-   * @param [out]: fused objects.
-   **/
+
+  // @brief: fuse objects from multi sensors(64-lidar, 16-lidar, radar...)
+  // @param [in]: multi sensor objects.
+  // @param [out]: fused objects.
+  // @return true if fuse successfully, otherwise return false
   virtual bool Fuse(const std::vector<SensorObjects> &multi_sensor_objects,
                     std::vector<ObjectPtr> *fused_objects) = 0;
   virtual std::string name() const = 0;

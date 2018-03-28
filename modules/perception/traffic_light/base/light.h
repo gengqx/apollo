@@ -34,13 +34,13 @@ namespace perception {
 namespace traffic_light {
 
 typedef apollo::perception::TrafficLight::Color TLColor;
-const TLColor UNKNOWN_COLOR = apollo::perception::TrafficLight::UNKNOWN;
-const TLColor GREEN = apollo::perception::TrafficLight::GREEN;
-const TLColor RED = apollo::perception::TrafficLight::RED;
-const TLColor YELLOW = apollo::perception::TrafficLight::YELLOW;
-const TLColor BLACK = apollo::perception::TrafficLight::BLACK;
+const TLColor UNKNOWN_COLOR = TrafficLight::UNKNOWN;
+const TLColor GREEN = TrafficLight::GREEN;
+const TLColor RED = TrafficLight::RED;
+const TLColor YELLOW = TrafficLight::YELLOW;
+const TLColor BLACK = TrafficLight::BLACK;
 // When the light has been covered by some objected, the color returned.
-const TLColor DEFAULT_UNKNOWN_COLOR = apollo::perception::TrafficLight::UNKNOWN;
+const TLColor DEFAULT_UNKNOWN_COLOR = TrafficLight::UNKNOWN;
 
 enum DetectionClassId {
   UNKNOWN_CLASS = -1,
@@ -49,7 +49,10 @@ enum DetectionClassId {
   HORIZONTAL_CLASS = 2
 };
 
-// @brief Light Region in the Image
+/**
+ * @class LightRegion
+ * @brief Light Region in the Image
+ */
 struct LightRegion {
   // roi is marked by map & projection, it may be too large or not accuracy.
   cv::Rect projection_roi;
@@ -78,7 +81,10 @@ struct LightRegion {
   }
 };
 
-// @brief Light Status
+/**
+ * @class LightStatus
+ * @brief Light Status
+ */
 struct LightStatus {
   // Traffic light color status.
   TLColor color = UNKNOWN_COLOR;
@@ -101,7 +107,10 @@ struct LightStatus {
   }
 };
 
-// @brief A Traffic Light.
+/**
+ * @class Light
+ * @brief A Traffic Light
+ */
 struct Light {
   Light() = default;
 
@@ -123,7 +132,12 @@ std::ostream &operator<<(std::ostream &os, const Light &light);
 typedef std::shared_ptr<Light> LightPtr;
 typedef std::vector<LightPtr> LightPtrs;
 
-// @brief compute stopline to car's distance
+/**
+ * @brief compute stopline to car's distance
+ * @param car pose
+ * @param stoplines
+ * @return distance
+ */
 double Distance2Stopline(
     const Eigen::Matrix4d &car_pose,
     const google::protobuf::RepeatedPtrField<apollo::hdmap::Curve> &stoplines);

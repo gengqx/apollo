@@ -20,9 +20,11 @@ cc_library(
 cc_library(
     name = "st_boundary_mapper",
     srcs = [
+        "speed_limit_decider.cc",
         "st_boundary_mapper.cc",
     ],
     hdrs = [
+        "speed_limit_decider.h",
         "st_boundary_mapper.h",
     ],
     deps = [
@@ -42,8 +44,29 @@ cc_library(
         "//modules/planning/common/path:path_data",
         "//modules/planning/common/speed:st_boundary",
         "//modules/planning/common/trajectory:discretized_trajectory",
+        "//modules/planning/proto:planning_config_proto",
         "//modules/planning/proto:planning_proto",
+        "//modules/planning/proto:st_boundary_config_proto",
         "//modules/planning/reference_line",
+    ],
+)
+
+cc_test(
+    name = "speed_limit_decider_test",
+    size = "small",
+    srcs = [
+        "speed_limit_decider_test.cc",
+    ],
+    data = [
+        "//modules/map:map_data",
+        "//modules/planning:planning_testdata",
+    ],
+    deps = [
+        ":st_boundary_mapper",
+        "//modules/common:log",
+        "//modules/common/time",
+        "//modules/common/util",
+        "@gtest//:main",
     ],
 )
 

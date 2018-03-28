@@ -14,8 +14,8 @@
  * limitations under the License.
  *****************************************************************************/
 
-#ifndef apollo_PERCEPTION_LIB_BASE_MUTEX_H
-#define apollo_PERCEPTION_LIB_BASE_MUTEX_H
+#ifndef MODULES_PERCEPTION_LIB_BASE_MUTEX_H_
+#define MODULES_PERCEPTION_LIB_BASE_MUTEX_H_
 
 #include <pthread.h>
 
@@ -27,7 +27,7 @@ namespace perception {
 class Mutex {
  public:
   Mutex() {
-    pthread_mutex_init(&mu_, NULL);
+    pthread_mutex_init(&mu_, nullptr);
   }
 
   ~Mutex() {
@@ -72,7 +72,7 @@ class MutexLock {
 class CondVar {
  public:
   CondVar() {
-    pthread_cond_init(&cv_, NULL);
+    pthread_cond_init(&cv_, nullptr);
   }
 
   ~CondVar() {
@@ -134,7 +134,7 @@ class BlockingCounter {
 class RwMutex {
  public:
   RwMutex() {
-    pthread_rwlock_init(&mu_, NULL);
+    pthread_rwlock_init(&mu_, nullptr);
   }
   ~RwMutex() {
     pthread_rwlock_destroy(&mu_);
@@ -187,4 +187,4 @@ class WriterMutexLock {
 }  // namespace perception
 }  // namespace apollo
 
-#endif  // apollo_PERCEPTION_LIB_BASE_MUTEX_H
+#endif  // MODULES_PERCEPTION_LIB_BASE_MUTEX_H_

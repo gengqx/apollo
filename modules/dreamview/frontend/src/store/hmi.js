@@ -9,18 +9,38 @@ export default class HMI {
 
     vehicles = [];
     @observable currentVehicle = 'none';
+    vehicleParam = {
+        frontEdgeToCenter: 3.89,
+        backEdgeToCenter: 1.04,
+        leftEdgeToCenter: 1.055,
+        rightEdgeToCenter: 1.055,
+        height: 1.48,
+        width: 2.11,
+        length: 4.933,
+        steerRatio: 16,
+    };
 
     maps = [];
     @observable currentMap = 'none';
 
     @observable moduleStatus = observable.map();
     @observable hardwareStatus = observable.map();
+    @observable enableStartAuto = false;
 
     displayName = {};
+    utmZoneId = 10;
+
+    @observable dockerImage = 'unknown';
 
     @action initialize(config) {
+        if (config.dockerImage) {
+            this.dockerImage = config.dockerImage;
+        }
         if (config.modes) {
             this.modes = config.modes;
+        }
+        if (config.utmZoneId) {
+            this.utmZoneId = config.utmZoneId;
         }
         this.vehicles = Object.keys(config.availableVehicles).sort()
             .map(name => {
@@ -66,6 +86,14 @@ export default class HMI {
         }
     }
 
+    @action update(world) {
+        this.enableStartAuto = world.engageAdvice === "READY_TO_ENGAGE";
+    }
+
+    updateVehicleParam(vehicleParam) {
+        this.vehicleParam = vehicleParam;
+    }
+
     @action toggleModule(id) {
         this.moduleStatus.set(id, !this.moduleStatus.get(id));
         const command = this.moduleStatus.get(id) ? "start" : "stop";
@@ -76,7 +104,7 @@ export default class HMI {
         return this.currentMode === "RTK Record / Replay";
     }
 
-    @computed get showNavigationMap() {
+    @computed get inNavigationMode() {
         return this.currentMode === "Navigation";
     }
 }

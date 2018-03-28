@@ -30,6 +30,8 @@ namespace apollo {
 namespace perception {
 namespace traffic_light {
 
+using common::adapter::AdapterManager;
+
 bool TLPreprocessorSubnode::InitInternal() {
   RegisterFactoryBoundaryProjection();
   if (!InitSharedData()) {
@@ -39,19 +41,19 @@ bool TLPreprocessorSubnode::InitInternal() {
 
   ConfigManager *config_manager = ConfigManager::instance();
   std::string model_name("TLPreprocessorSubnode");
-  const ModelConfig *model_config(nullptr);
-  if (!config_manager->GetModelConfig(model_name, &model_config)) {
+  const ModelConfig *model_config = config_manager->GetModelConfig(model_name);
+  if (model_config == nullptr) {
     AERROR << "TLPreprocessorSubnode not found model: " << model_name;
     return false;
   }
-  float _max_process_image_fps;
+  float max_process_image_fps_;
   if (!model_config->GetValue("max_process_image_fps",
-                              &_max_process_image_fps)) {
+                              &max_process_image_fps_)) {
     AERROR << "TLPreprocessorSubnode Failed to find Conf: "
            << "max_process_image_fps.";
     return false;
   }
-  proc_interval_seconds_ = 1.0f / _max_process_image_fps;
+  proc_interval_seconds_ = 1.0f / max_process_image_fps_;
 
   if (!model_config->GetValue("query_tf_inverval_seconds",
                               &query_tf_inverval_seconds_)) {
@@ -71,13 +73,12 @@ bool TLPreprocessorSubnode::InitInternal() {
     return false;
   }
 
-  using common::adapter::AdapterManager;
   CHECK(AdapterManager::GetImageLong())
-  << "TLPreprocessorSubnode init failed.ImageLong is not initialized.";
+      << "TLPreprocessorSubnode init failed.ImageLong is not initialized.";
   AdapterManager::AddImageLongCallback(
       &TLPreprocessorSubnode::SubLongFocusCamera, this);
   CHECK(AdapterManager::GetImageShort())
-  << "TLPreprocessorSubnode init failed.ImageShort is not initialized.";
+      << "TLPreprocessorSubnode init failed.ImageShort is not initialized.";
   AdapterManager::AddImageShortCallback(
       &TLPreprocessorSubnode::SubShortFocusCamera, this);
   return true;
@@ -151,23 +152,22 @@ bool TLPreprocessorSubnode::AddDataAndPublishEvent(
 }
 
 void TLPreprocessorSubnode::SubLongFocusCamera(const sensor_msgs::Image &msg) {
-  common::adapter::AdapterManager::Observe();
-  std::shared_ptr<const sensor_msgs::Image> img =
-      common::adapter::AdapterManager::GetImageLong()->GetLatestObservedPtr();
-  SubCameraImage(img, LONG_FOCUS);
+  AdapterManager::Observe();
+  SubCameraImage(AdapterManager::GetImageLong()->GetLatestObservedPtr(),
+                 LONG_FOCUS);
+  PERF_FUNCTION("SubLongFocusCamera");
 }
 
 void TLPreprocessorSubnode::SubShortFocusCamera(const sensor_msgs::Image &msg) {
-  common::adapter::AdapterManager::Observe();
-  std::shared_ptr<const sensor_msgs::Image> img =
-      common::adapter::AdapterManager::GetImageShort()->GetLatestObservedPtr();
-  SubCameraImage(img, SHORT_FOCUS);
+  AdapterManager::Observe();
+  SubCameraImage(AdapterManager::GetImageShort()->GetLatestObservedPtr(),
+                 SHORT_FOCUS);
+  PERF_FUNCTION("SubShortFocusCamera");
 }
 
 void TLPreprocessorSubnode::SubCameraImage(
-    std::shared_ptr<const sensor_msgs::Image> msg, CameraId camera_id) {
+    boost::shared_ptr<const sensor_msgs::Image> msg, CameraId camera_id) {
   const double sub_camera_image_start_ts = TimeUtil::GetCurrentTime();
-  PERF_FUNCTION();
   std::shared_ptr<Image> image(new Image);
   cv::Mat cv_mat;
   double timestamp = msg->header.stamp.toSec();
@@ -177,8 +177,7 @@ void TLPreprocessorSubnode::SubCameraImage(
     image->GenerateMat();
     char filename[100];
     snprintf(filename, sizeof(filename), "%s/%lf.jpg",
-             image->camera_id_str().c_str(),
-             timestamp);
+             image->camera_id_str().c_str(), timestamp);
     cv::imwrite(filename, image->mat());
   }
   AINFO << "TLPreprocessorSubnode received a image msg"
@@ -190,14 +189,14 @@ void TLPreprocessorSubnode::SubCameraImage(
 
   AINFO << "sub_camera_image_start_ts: "
         << GLOG_TIMESTAMP(sub_camera_image_start_ts)
-        << " , _last_proc_image_ts: " << GLOG_TIMESTAMP(last_proc_image_ts_)
+        << " , last_proc_image_ts_: " << GLOG_TIMESTAMP(last_proc_image_ts_)
         << " , diff: "
         << GLOG_TIMESTAMP(sub_camera_image_start_ts - last_proc_image_ts_);
   if (last_proc_image_ts_ > 0.0 &&
       sub_camera_image_start_ts - last_proc_image_ts_ <
           proc_interval_seconds_) {
     AINFO << "skip current image, img_ts: " << GLOG_TIMESTAMP(timestamp)
-          << " ,because _proc_interval_seconds: "
+          << " ,because proc_interval_seconds_: "
           << GLOG_TIMESTAMP(proc_interval_seconds_);
     return;
   }
@@ -225,7 +224,7 @@ void TLPreprocessorSubnode::SubCameraImage(
   if (fabs(image_lights->diff_image_sys_ts) > image_sys_ts_diff_threshold) {
     std::string debug_string = "";
     debug_string += ("diff_image_sys_ts:" +
-        std::to_string(image_lights->diff_image_sys_ts));
+                     std::to_string(image_lights->diff_image_sys_ts));
     debug_string += (",camera_id:" + kCameraIdToStr.at(camera_id));
     debug_string += (",camera_ts:" + std::to_string(timestamp));
 
@@ -324,7 +323,7 @@ bool TLPreprocessorSubnode::VerifyLightsProjection(
   if (!preprocessor_.ProjectLights(pose, signals, image_lights->camera_id,
                                    image_lights->lights.get(),
                                    image_lights->lights_outside_image.get())) {
-    AINFO << "_preprocessor.select_camera_by_lights_projection failed";
+    AINFO << "preprocessor_.select_camera_by_lights_projection failed";
     return false;
   }
 
@@ -359,4 +358,3 @@ void TLPreprocessorSubnode::CameraSelection(double ts) {
 }  // namespace traffic_light
 }  // namespace perception
 }  // namespace apollo
-

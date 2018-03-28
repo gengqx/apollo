@@ -5,12 +5,16 @@ import classNames from "classnames";
 import RadioItem from 'components/common/RadioItem';
 
 import menuData from 'store/config/MenuData';
-import perceptionIcon from "assets/images/menu/Perception.png";
-import predictionIcon from "assets/images/menu/Prediction.png";
-import routingIcon from "assets/images/menu/Routing.png";
-import decisionIcon from "assets/images/menu/Decision.png";
-import planningIcon from "assets/images/menu/Planning.png";
-import cameraIcon from "assets/images/menu/PointOfView.png";
+import perceptionIcon from "assets/images/menu/perception.png";
+import predictionIcon from "assets/images/menu/prediction.png";
+import routingIcon from "assets/images/menu/routing.png";
+import decisionIcon from "assets/images/menu/decision.png";
+import planningIcon from "assets/images/menu/planning.png";
+import cameraIcon from "assets/images/menu/point_of_view.png";
+import positionIcon from "assets/images/menu/position.png";
+import mapIcon from "assets/images/menu/map.png";
+
+import { POINT_CLOUD_WS } from "store/websocket";
 
 const MenuIconMapping = {
         perception: perceptionIcon,
@@ -18,10 +22,13 @@ const MenuIconMapping = {
         routing: routingIcon,
         decision: decisionIcon,
         planning: planningIcon,
-        camera: cameraIcon
+        camera: cameraIcon,
+        position: positionIcon,
+        map: mapIcon,
 };
 
 const MenuIdOptionMapping = {
+        perceptionPointCloud: 'showPointCloud',
         perceptionVehicle: 'showObstaclesVehicle',
         perceptionPedestrian: 'showObstaclesPedestrian',
         perceptionBicycle: 'showObstaclesBicycle',
@@ -37,10 +44,20 @@ const MenuIdOptionMapping = {
         routing: 'showRouting',
         decisionMain: 'showDecisionMain',
         decisionObstacle: 'showDecisionObstacle',
+        planningCar: 'showPlanningCar',
         planningReference: 'showPlanningReference',
-        planingDpOptimizer: 'showPlaningDpOptimizer',
+        planningDpOptimizer: 'showPlanningDpOptimizer',
         planningQpOptimizer: 'showPlanningQpOptimizer',
-        planningLine: 'showPlanning'
+        planningLine: 'showPlanning',
+        positionLocalization: 'showPositionLocalization',
+        positionGps: 'showPositionGps',
+        mapCrosswalk: 'showMapCrosswalk',
+        mapClearArea: 'showMapClearArea',
+        mapJunction: 'showMapJunction',
+        mapLane: 'showMapLane',
+        mapRoad: 'showMapRoad',
+        mapSignal: 'showMapSignal',
+        mapStopSign: 'showMapStopSign',
 };
 
 @observer
@@ -51,6 +68,9 @@ class MenuItemCheckbox extends React.Component {
             <ul>
                 <li id={id} onClick={() => {
                     options.toggle(MenuIdOptionMapping[id]);
+                    if (id === "perceptionPointCloud") {
+                        POINT_CLOUD_WS.togglePointCloud(options.showPointCloud);
+                    }
                 }}>
                     <div className="switch">
                         <input type="checkbox" name={id} className="toggle-switch"
@@ -73,6 +93,9 @@ class SubMenu extends React.Component {
             entries = Object.keys(data)
                 .map(key => {
                     const item = data[key];
+                    if (options.hideOptionToggle[key]) {
+                        return null;
+                    }
                     return (
                         <MenuItemCheckbox key={key} id={key} title={item}
                         options={options}/>
@@ -82,6 +105,9 @@ class SubMenu extends React.Component {
             entries = Object.keys(data)
                 .map(key => {
                     const item = data[key];
+                    if (options.hideOptionToggle[key]) {
+                        return null;
+                    }
                     return (
                         <RadioItem key={`${tabId}_${key}`} id={tabId}
                                    onClick={() => {
@@ -111,17 +137,23 @@ class SubMenu extends React.Component {
 export default class Menu extends React.Component {
     render() {
         const { options } = this.props;
+
         const subMenu = Object.keys(menuData)
             .map(key => {
                 const item = menuData[key];
-                return (
-                    <SubMenu key={item.id} tabId={item.id} tabTitle={item.title}
-                    tabType={item.type} data={item.data} options={options} />
-                );
+
+                if (OFFLINE_PLAYBACK && !item.supportInOfflineView) {
+                    return null;
+                } else {
+                    return (
+                        <SubMenu key={item.id} tabId={item.id} tabTitle={item.title}
+                                 tabType={item.type} data={item.data} options={options} />
+                    );
+                }
             });
 
         return (
-            <div className="nav-side-menu" id="layer-menu">
+            <div className="tool-view-menu" id="layer-menu">
                 {subMenu}
             </div>
         );

@@ -17,7 +17,7 @@
 #include <algorithm>
 
 #include "modules/common/log.h"
-#include "modules/perception/obstacle/common/geometry_util.h"
+#include "modules/perception/common/geometry_util.h"
 #include "modules/perception/obstacle/lidar/tracker/hm_tracker/kalman_filter.h"
 
 namespace apollo {
@@ -98,6 +98,8 @@ KalmanFilter::KalmanFilter() {
   name_ = "KalmanFilter";
   age_ = 0;
   measurement_cached_history_size_ = s_measurement_cached_history_size_minimum_;
+  s_measurement_cached_history_size_maximum_ =
+      s_measurement_cached_history_size_minimum_;
   velocity_covariance_ =
       s_initial_velocity_noise_ * Eigen::Matrix3d::Identity();
   // states
@@ -457,7 +459,7 @@ float KalmanFilter::ComputeUpdateQualityAccordingPointNumChange(
     return 0;
   }
   float update_quality =
-      1 - fabs(new_pt_num - old_pt_num) / std::max(new_pt_num, old_pt_num);
+      1 - std::abs(new_pt_num - old_pt_num) / std::max(new_pt_num, old_pt_num);
   return update_quality;
 }
 
@@ -512,8 +514,8 @@ void KalmanFilter::EvaluateOnlineCovariance() {
   online_velocity_covariance_ = online_covariance / evaluate_window;
 }
 
-void KalmanFilter::GetOnlineCovariance(Eigen::Matrix3d* online_covariance) {
-  *online_covariance = online_velocity_covariance_;
+void KalmanFilter::GetOnlineCovariance(Eigen::Matrix3f* online_covariance) {
+  *online_covariance = online_velocity_covariance_.cast<float>();
 }
 
 void KalmanFilter::UpdateAcceleration(

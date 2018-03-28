@@ -15,11 +15,11 @@
  *****************************************************************************/
 
 #include <map>
-#include <vector>
+#include <numeric>
 
 #include "modules/common/log.h"
+#include "modules/perception/common/geometry_util.h"
 #include "modules/perception/lib/config_manager/config_manager.h"
-#include "modules/perception/obstacle/common/geometry_util.h"
 #include "modules/perception/obstacle/lidar/tracker/hm_tracker/feature_descriptor.h"
 #include "modules/perception/obstacle/lidar/tracker/hm_tracker/hm_tracker.h"
 #include "modules/perception/obstacle/lidar/tracker/hm_tracker/hungarian_matcher.h"
@@ -30,28 +30,16 @@ namespace apollo {
 namespace perception {
 
 HmObjectTracker::HmObjectTracker()
-    : matcher_method_(HUNGARIAN_MATCHER),
-      filter_method_(KALMAN_FILTER),
-      use_histogram_for_match_(false),
-      histogram_bin_size_(10),
-      matcher_(nullptr),
-      time_stamp_(0.0),
-      valid_(false) {}
-
-HmObjectTracker::~HmObjectTracker() {
-  if (matcher_) {
-    delete matcher_;
-    matcher_ = nullptr;
-  }
-}
+    : matcher_method_(HUNGARIAN_MATCHER), filter_method_(KALMAN_FILTER) {}
 
 bool HmObjectTracker::Init() {
   // Initialize tracker's configs
   using apollo::perception::ConfigManager;
   using apollo::perception::ModelConfig;
 
-  const ModelConfig* model_config = nullptr;
-  if (!ConfigManager::instance()->GetModelConfig(name(), &model_config)) {
+  const ModelConfig* model_config =
+      ConfigManager::instance()->GetModelConfig(name());
+  if (model_config == nullptr) {
     AERROR << "not found model config: " << name();
     return false;
   }
@@ -76,10 +64,10 @@ bool HmObjectTracker::Init() {
     return false;
   }
   if (matcher_method_ == HUNGARIAN_MATCHER) {
-    matcher_ = new HungarianMatcher();
+    matcher_.reset(new HungarianMatcher());
   } else {
     matcher_method_ = HUNGARIAN_MATCHER;
-    matcher_ = new HungarianMatcher();
+    matcher_.reset(new HungarianMatcher());
     AWARN << "invalid matcher method! default HungarianMatcher in use!";
   }
   // load filter method
@@ -394,8 +382,14 @@ bool HmObjectTracker::Track(const std::vector<ObjectPtr>& objects,
   std::vector<int> unassigned_objects;
   std::vector<int> unassigned_tracks;
   std::vector<ObjectTrackPtr>& tracks = object_tracks_.GetTracks();
-  matcher_->Match(&transformed_objects, tracks, tracks_predict, &assignments,
-                  &unassigned_tracks, &unassigned_objects);
+  if (matcher_ != nullptr) {
+    matcher_->Match(&transformed_objects, tracks, tracks_predict, &assignments,
+                    &unassigned_tracks, &unassigned_objects);
+  } else {
+    AERROR << "matcher_ is not initiated. Please call Init() function before "
+              "other functions.";
+    return false;
+  }
   ADEBUG << "multi-object-tracking: " << tracks.size() << "  "
          << assignments.size() << "  " << transformed_objects.size() << "  "
          << unassigned_objects.size() << "  " << time_diff;
@@ -611,7 +605,7 @@ void HmObjectTracker::CollectTrackedResults(
     obj->width = result_obj->size[1];
     obj->height = result_obj->size[2];
     obj->velocity = result_obj->velocity.cast<double>();
-    obj->velocity_uncertainty = result_obj->velocity_uncertainty;
+    obj->velocity_uncertainty = result_obj->velocity_uncertainty.cast<double>();
     obj->track_id = tracks[i]->idx_;
     obj->tracking_time = tracks[i]->period_;
     obj->type = result_obj->type;

@@ -24,6 +24,8 @@
 #include <map>
 #include <string>
 #include <vector>
+
+#include "modules/localization/msf/local_map/base_map/base_map_config.h"
 #include "modules/localization/msf/local_tool/local_visualization/engine/visualization_engine.h"
 
 namespace apollo {
@@ -42,7 +44,8 @@ class OfflineLocalVisualizer {
   ~OfflineLocalVisualizer();
 
  public:
-  bool Init(const std::string &map_folder, const std::string &pcd_folder,
+  bool Init(const std::string &map_folder, const std::string &map_visual_folder,
+            const std::string &pcd_folder,
             const std::string &pcd_timestamp_file,
             const std::string &gnss_loc_file, const std::string &lidar_loc_file,
             const std::string &fusion_loc_file,
@@ -61,7 +64,8 @@ class OfflineLocalVisualizer {
   //       const std::vector<double> &in_timestamps,
   //       const std::vector<double> &ref_timestamps,
   //       std::map<unsigned int, Eigen::Affine3d> &out_poses);
-  void PoseAndStdInterpolationByTime(
+ public:
+  static void PoseAndStdInterpolationByTime(
       const std::vector<Eigen::Affine3d> &in_poses,
       const std::vector<Eigen::Vector3d> &in_stds,
       const std::vector<double> &in_timestamps,
@@ -74,6 +78,7 @@ class OfflineLocalVisualizer {
 
  private:
   std::string map_folder_;
+  std::string map_visual_folder_;
   std::string pcd_folder_;
   std::string pcd_timestamp_file_;
   std::string gnss_loc_file_;

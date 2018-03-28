@@ -15,23 +15,20 @@
  *****************************************************************************/
 
 /**
- * @file speed_optimizer.cc
+ * @file
  **/
+
+#include "modules/planning/tasks/speed_optimizer.h"
 
 #include "modules/planning/common/planning_gflags.h"
 #include "modules/planning/common/speed_limit.h"
-#include "modules/planning/tasks/speed_optimizer.h"
 
 namespace apollo {
 namespace planning {
 
+using apollo::common::Status;
 using apollo::planning_internal::StGraphBoundaryDebug;
 using apollo::planning_internal::STGraphDebug;
-using apollo::common::Status;
-
-namespace {
-constexpr double kSpeedOptimizationFallbackClost = 2e4;
-}
 
 SpeedOptimizer::SpeedOptimizer(const std::string& name) : Task(name) {}
 
@@ -46,59 +43,8 @@ apollo::common::Status SpeedOptimizer::Execute(
       reference_line_info->path_decision(),
       reference_line_info->mutable_speed_data());
 
-  if (!ret.ok() && FLAGS_enable_slowdown_profile_generator) {
-    *reference_line_info->mutable_speed_data() = GenerateStopProfile(
-        frame->PlanningStartPoint().v(), frame->PlanningStartPoint().a());
-    reference_line_info->AddCost(kSpeedOptimizationFallbackClost);
-    ret = Status::OK();
-  }
   RecordDebugInfo(reference_line_info->speed_data());
   return ret;
-}
-
-SpeedData SpeedOptimizer::GenerateStopProfile(const double init_speed,
-                                              const double init_acc) const {
-  AERROR << "Slowing down the car.";
-  SpeedData speed_data;
-
-  const double kFixedJerk = -1.0;
-  const double first_point_acc = std::fmin(0.0, init_acc);
-
-  const size_t max_t = 3.0;
-  const double unit_t = 0.02;
-
-  double pre_s = 0.0;
-  const double t_mid =
-      (FLAGS_slowdown_profile_deceleration - first_point_acc) / kFixedJerk;
-  const double s_mid = init_speed * t_mid +
-                       0.5 * first_point_acc * t_mid * t_mid +
-                       1.0 / 6.0 * kFixedJerk * t_mid * t_mid * t_mid;
-  const double v_mid =
-      init_speed + first_point_acc * t_mid + 0.5 * kFixedJerk * t_mid * t_mid;
-
-  for (double t = 0.0; t < max_t; t += unit_t) {
-    double s = 0.0;
-    double v = 0.0;
-    if (t <= t_mid) {
-      s = std::fmax(pre_s, init_speed * t + 0.5 * first_point_acc * t * t +
-                               1.0 / 6.0 * kFixedJerk * t * t * t);
-      v = std::fmax(
-          0.0, init_speed + first_point_acc * t + 0.5 * kFixedJerk * t * t);
-      const double a = first_point_acc + kFixedJerk * t;
-      speed_data.AppendSpeedPoint(s, t, v, a, 0.0);
-      pre_s = s;
-    } else {
-      s = std::fmax(pre_s, s_mid + v_mid * (t - t_mid) +
-                               0.5 * FLAGS_slowdown_profile_deceleration *
-                                   (t - t_mid) * (t - t_mid));
-      v = std::fmax(0.0,
-                    v_mid + (t - t_mid) * FLAGS_slowdown_profile_deceleration);
-      speed_data.AppendSpeedPoint(s, t, v, FLAGS_slowdown_profile_deceleration,
-                                  0.0);
-    }
-    pre_s = s;
-  }
-  return speed_data;
 }
 
 void SpeedOptimizer::RecordDebugInfo(const SpeedData& speed_data) {
@@ -110,8 +56,8 @@ void SpeedOptimizer::RecordDebugInfo(const SpeedData& speed_data) {
 }
 
 void SpeedOptimizer::RecordSTGraphDebug(const StGraphData& st_graph_data,
-                                        STGraphDebug* st_graph_debug) {
-  if (!FLAGS_enable_record_debug) {
+                                        STGraphDebug* st_graph_debug) const {
+  if (!FLAGS_enable_record_debug || !st_graph_debug) {
     ADEBUG << "Skip record debug info";
     return;
   }

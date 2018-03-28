@@ -20,6 +20,7 @@
 #include <map>
 #include <memory>
 #include <string>
+
 #include "gtest/gtest.h"
 #include "modules/perception/obstacle/fusion/probabilistic_fusion/pbf_base_motion_fusion.h"
 #include "modules/perception/obstacle/fusion/probabilistic_fusion/pbf_sensor_object.h"
@@ -48,6 +49,8 @@ class PbfTrack {
 
   PbfSensorObjectPtr GetRadarObject(const std::string &sensor_id);
 
+  PbfSensorObjectPtr GetCameraObject(const std::string &sensor_id);
+
   PbfSensorObjectPtr GetSensorObject(const SensorType &sensor_type,
                                      const std::string &sensor_id);
 
@@ -55,6 +58,8 @@ class PbfTrack {
   PbfSensorObjectPtr GetLatestLidarObject();
   /**@brief get latest lidar measurement for multi radar sensors*/
   PbfSensorObjectPtr GetLatestRadarObject();
+  /**@brief get latest camera measurement for multi camera sensors*/
+  PbfSensorObjectPtr GetLatestCameraObject();
 
   int GetTrackId() const;
 
@@ -71,6 +76,14 @@ class PbfTrack {
 
   static double GetMaxLidarInvisiblePeriod() {
     return s_max_lidar_invisible_period_;
+  }
+
+  static void SetMaxCameraInvisiblePeriod(double period) {
+    s_max_camera_invisible_period_ = period;
+  }
+
+  static double GetMaxCameraInvisiblePeriod() {
+    return s_max_camera_invisible_period_;
   }
 
   static void SetMaxRadarInvisiblePeriod(double period) {
@@ -108,6 +121,8 @@ class PbfTrack {
 
   void PerformMotionFusion(PbfSensorObjectPtr obj);
 
+  void PerformMotionFusionAsync(PbfSensorObjectPtr obj);
+
   void UpdateMeasurementsLifeWithMeasurement(
       std::map<std::string, PbfSensorObjectPtr> *objects,
       const std::string &sensor_id, double timestamp,
@@ -132,13 +147,15 @@ class PbfTrack {
   double invisible_period_;
   bool invisible_in_lidar_;
   bool invisible_in_radar_;
+  bool invisible_in_camera_;
 
   /**@brief motion fusion*/
-  PbfBaseMotionFusion *motion_fusion_ = nullptr;
+  std::shared_ptr<PbfBaseMotionFusion> motion_fusion_;
 
   /**@brief one object instance per sensor, might be more later*/
   std::map<std::string, PbfSensorObjectPtr> lidar_objects_;
   std::map<std::string, PbfSensorObjectPtr> radar_objects_;
+  std::map<std::string, PbfSensorObjectPtr> camera_objects_;
 
   bool is_dead_;
 
@@ -150,10 +167,13 @@ class PbfTrack {
   // invisible period for different sensors
   static double s_max_lidar_invisible_period_;
   static double s_max_radar_invisible_period_;
+  static double s_max_camera_invisible_period_;
+
   // radar confidant regions
   static double s_max_radar_confident_angle_;
   static double s_min_radar_confident_distance_;
-  static std::string s_motion_fusion_method_;
+  static std::string s_motion_fusion_method_; // NOLINT
+
   // publish conditions
   static bool s_publish_if_has_lidar_;
   static bool s_publish_if_has_radar_;

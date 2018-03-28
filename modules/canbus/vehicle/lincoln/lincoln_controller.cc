@@ -25,6 +25,7 @@
 #include "modules/canbus/vehicle/lincoln/protocol/throttle_62.h"
 #include "modules/canbus/vehicle/lincoln/protocol/turnsignal_68.h"
 #include "modules/canbus/vehicle/vehicle_controller.h"
+#include "modules/common/kv_db/kv_db.h"
 #include "modules/common/log.h"
 #include "modules/common/time/time.h"
 #include "modules/drivers/canbus/can_comm/can_sender.h"
@@ -173,7 +174,13 @@ Chassis LincolnController::chassis() {
     chassis_.set_speed_mps(0);
   }
   // 6
-  chassis_.set_odometer_m(0);
+  if (chassis_detail.has_basic() && chassis_detail.basic().has_odo_meter()) {
+    // odo_meter is in km
+    chassis_.set_odometer_m(chassis_detail.basic().odo_meter() * 1000);
+  } else {
+    chassis_.set_odometer_m(0);
+  }
+
   // 7
   // lincoln only has fuel percentage
   // to avoid confusing, just don't set
@@ -297,6 +304,25 @@ Chassis LincolnController::chassis() {
     chassis_.mutable_chassis_gps()->set_gps_valid(false);
   }
 
+  // vin number will be written into KVDB once.
+  if (chassis_detail.license().has_vin() && !received_vin_) {
+    apollo::common::KVDB::Put("apollo:canbus:vin",
+                              chassis_detail.license().vin());
+    received_vin_ = true;
+  }
+
+  // give engage_advice based on error_code and canbus feedback
+  if (!chassis_error_mask_ && !chassis_.parking_brake() &&
+      (chassis_.throttle_percentage() != 0.0) &&
+      (chassis_.brake_percentage() != 0.0)) {
+    chassis_.mutable_engage_advice()->set_advice(
+        apollo::common::EngageAdvice::READY_TO_ENGAGE);
+  } else {
+    chassis_.mutable_engage_advice()->set_advice(
+        apollo::common::EngageAdvice::DISALLOW_ENGAGE);
+    chassis_.mutable_engage_advice()->set_reason(
+        "CANBUS not ready, firmware error or emergency button pressed!");
+  }
   return chassis_;
 }
 

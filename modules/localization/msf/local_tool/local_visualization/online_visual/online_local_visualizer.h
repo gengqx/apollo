@@ -40,8 +40,9 @@
 
 #include "glog/logging.h"
 #include "gtest/gtest_prod.h"
+
 #include "modules/common/apollo_app.h"
-#include "modules/common/monitor/monitor.h"
+#include "modules/common/monitor_log/monitor_log_buffer.h"
 #include "modules/common/status/status.h"
 #include "modules/localization/msf/local_tool/local_visualization/engine/visualization_manager.h"
 
@@ -74,7 +75,7 @@ class OnlineLocalVisualizer : public apollo::common::ApolloApp {
    * @brief module initialization function
    * @return initialization status
    */
-  apollo::common::Status Init();
+  apollo::common::Status Init() override;
 
   /**
    * @brief module stop function
@@ -94,8 +95,10 @@ class OnlineLocalVisualizer : public apollo::common::ApolloApp {
                               std::vector<unsigned char> *intensities);
 
  private:
-  apollo::common::monitor::Monitor monitor_;
-  VisualizationManagerParams visual_manager_params_;
+  apollo::common::monitor::MonitorLogger monitor_logger_;
+  std::string lidar_extrinsic_file_;
+  std::string map_folder_;
+  std::string map_visual_folder_;
 };
 
 }  // namespace msf

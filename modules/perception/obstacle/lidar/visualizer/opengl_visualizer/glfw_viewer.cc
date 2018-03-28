@@ -34,8 +34,8 @@ namespace perception {
 
 GLFWViewer::GLFWViewer() {
   init_ = false;
-  window_ = NULL;
-  pers_camera_ = NULL;
+  window_ = nullptr;
+  pers_camera_ = nullptr;
   forward_dir_ = Eigen::Vector3d::Zero();
   scn_center_ = Eigen::Vector3d::Zero();
   bg_color_ = Eigen::Vector3d::Zero();
@@ -105,9 +105,7 @@ void GLFWViewer::SpinOnce() {
   glfwSwapBuffers(window_);
 }
 
-void GLFWViewer::Close() {
-  glfwTerminate();
-}
+void GLFWViewer::Close() { glfwTerminate(); }
 
 void GLFWViewer::SetSize(int w, int h) {
   win_width_ = w;
@@ -206,21 +204,27 @@ bool GLFWViewer::OpenglInit() {
     for (int i = 0; i < kCloud_VAO_Num_; i++) {
       glBindVertexArray(cloud_VAO_buf_ids_[i]);
 
-      glGenBuffers(NUM_VBO_TYPE, cloud_VBO_buf_ids_[i]);
-      glBindBuffer(GL_ARRAY_BUFFER, cloud_VBO_buf_ids_[i][VBO_VERTICES]);
+      glGenBuffers(static_cast<int>(VBO_Type::NUM_VBO_TYPE),
+                   cloud_VBO_buf_ids_[i]);
+      glBindBuffer(
+          GL_ARRAY_BUFFER,
+          cloud_VBO_buf_ids_[i][static_cast<int>(VBO_Type::VBO_VERTICES)]);
       glBufferData(GL_ARRAY_BUFFER, sizeof(cloud_verts_), cloud_verts_,
                    GL_STREAM_DRAW);
       glVertexPointer(3, GL_FLOAT, 0, BUFFER_OFFSET(0));
       glEnableClientState(GL_VERTEX_ARRAY);
 
-      glBindBuffer(GL_ARRAY_BUFFER, cloud_VBO_buf_ids_[i][VBO_COLORS]);
+      glBindBuffer(
+          GL_ARRAY_BUFFER,
+          cloud_VBO_buf_ids_[i][static_cast<int>(VBO_Type::VBO_COLORS)]);
       glBufferData(GL_ARRAY_BUFFER, sizeof(cloud_colors), cloud_colors,
                    GL_STREAM_DRAW);
       glColorPointer(3, GL_FLOAT, 0, BUFFER_OFFSET(0));
       glEnableClientState(GL_COLOR_ARRAY);
 
-      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
-                   cloud_VBO_buf_ids_[i][VBO_ELEMENTS]);
+      glBindBuffer(
+          GL_ELEMENT_ARRAY_BUFFER,
+          cloud_VBO_buf_ids_[i][static_cast<int>(VBO_Type::VBO_ELEMENTS)]);
       glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cloud_indices),
                    cloud_indices, GL_STREAM_DRAW);
     }
@@ -251,21 +255,27 @@ bool GLFWViewer::OpenglInit() {
 
       glBindVertexArray(circle_VAO_buf_ids_[vao]);
 
-      glGenBuffers(NUM_VBO_TYPE, circle_VBO_buf_ids_[vao]);
-      glBindBuffer(GL_ARRAY_BUFFER, circle_VBO_buf_ids_[vao][VBO_VERTICES]);
+      glGenBuffers(static_cast<int>(VBO_Type::NUM_VBO_TYPE),
+                   circle_VBO_buf_ids_[vao]);
+      glBindBuffer(
+          GL_ARRAY_BUFFER,
+          circle_VBO_buf_ids_[vao][static_cast<int>(VBO_Type::VBO_VERTICES)]);
       glBufferData(GL_ARRAY_BUFFER, sizeof(circle_verts), circle_verts,
                    GL_STATIC_DRAW);
       glVertexPointer(3, GL_FLOAT, 0, BUFFER_OFFSET(0));
       glEnableClientState(GL_VERTEX_ARRAY);
 
-      glBindBuffer(GL_ARRAY_BUFFER, circle_VBO_buf_ids_[vao][VBO_COLORS]);
+      glBindBuffer(
+          GL_ARRAY_BUFFER,
+          circle_VBO_buf_ids_[vao][static_cast<int>(VBO_Type::VBO_COLORS)]);
       glBufferData(GL_ARRAY_BUFFER, sizeof(circle_colors), circle_colors,
                    GL_STATIC_DRAW);
       glColorPointer(3, GL_FLOAT, 0, BUFFER_OFFSET(0));
       glEnableClientState(GL_COLOR_ARRAY);
 
-      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
-                   circle_VBO_buf_ids_[vao][VBO_ELEMENTS]);
+      glBindBuffer(
+          GL_ELEMENT_ARRAY_BUFFER,
+          circle_VBO_buf_ids_[vao][static_cast<int>(VBO_Type::VBO_ELEMENTS)]);
       glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(circle_indices),
                    circle_indices, GL_STATIC_DRAW);
     }
@@ -348,7 +358,9 @@ void GLFWViewer::DrawCloud() {
       }
 
       glBindVertexArray(cloud_VAO_buf_ids_[vao]);
-      glBindBuffer(GL_ARRAY_BUFFER, cloud_VBO_buf_ids_[vao][VBO_VERTICES]);
+      glBindBuffer(
+          GL_ARRAY_BUFFER,
+          cloud_VBO_buf_ids_[vao][static_cast<int>(VBO_Type::VBO_VERTICES)]);
       glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(cloud_verts_), cloud_verts_);
       glDrawElements(GL_POINTS, p_num, GL_UNSIGNED_INT, BUFFER_OFFSET(0));
       glBindVertexArray(0);
@@ -411,7 +423,8 @@ void GLFWViewer::DrawObstacle(const ObjectPtr obj, bool show_cloud,
                               bool show_polygon, bool show_velocity,
                               bool show_direction) {
   float type_color[3] = {0, 0, 0};
-  GetClassColor(obj->type, type_color);
+  // TODO(All): modify GetClassColor params
+  GetClassColor(static_cast<int>(obj->type), type_color);
   if (show_polygon) {
     double h = obj->height;
     glColor3f(type_color[0], type_color[1], type_color[2]);
@@ -575,7 +588,7 @@ void GLFWViewer::GetClassColor(int cls, float rgb[3]) {
 void GLFWViewer::FramebufferSizeCallback(GLFWwindow *window, int width,
                                          int height) {
   void *user_data = glfwGetWindowUserPointer(window);
-  if (user_data == NULL) return;
+  if (user_data == nullptr) return;
 
   GLFWViewer *vis = static_cast<GLFWViewer *>(user_data);
   vis->ResizeFramebuffer(width, height);
@@ -584,7 +597,7 @@ void GLFWViewer::FramebufferSizeCallback(GLFWwindow *window, int width,
 void GLFWViewer::KeyCallback(GLFWwindow *window, int key, int scancode,
                              int action, int mods) {
   void *user_data = glfwGetWindowUserPointer(window);
-  if (user_data == NULL) return;
+  if (user_data == nullptr) return;
   if (action == GLFW_PRESS) {
     GLFWViewer *vis = static_cast<GLFWViewer *>(user_data);
     AINFO << "key_value: " << key;
@@ -598,7 +611,7 @@ void GLFWViewer::MouseButtonCallback(GLFWwindow *window, int button, int action,
 void GLFWViewer::MouseCursorPositionCallback(GLFWwindow *window, double xpos,
                                              double ypos) {
   void *user_data = glfwGetWindowUserPointer(window);
-  if (user_data == NULL) return;
+  if (user_data == nullptr) return;
 
   GLFWViewer *vis = static_cast<GLFWViewer *>(user_data);
   vis->MouseMove(xpos, ypos);
@@ -607,7 +620,7 @@ void GLFWViewer::MouseCursorPositionCallback(GLFWwindow *window, double xpos,
 void GLFWViewer::MouseScrollCallback(GLFWwindow *window, double xoffset,
                                      double yoffset) {
   void *user_data = glfwGetWindowUserPointer(window);
-  if (user_data == NULL) return;
+  if (user_data == nullptr) return;
 
   GLFWViewer *vis = static_cast<GLFWViewer *>(user_data);
   vis->MouseWheel(yoffset);
@@ -659,13 +672,9 @@ void GLFWViewer::MouseMove(double xpos, double ypos) {
   mouse_prev_y_ = ypos;
 }
 
-void GLFWViewer::MouseWheel(double delta) {
-  mode_mat_(2, 3) -= delta;
-}
+void GLFWViewer::MouseWheel(double delta) { mode_mat_(2, 3) -= delta; }
 
-void GLFWViewer::Reset() {
-  mode_mat_ = Eigen::Matrix4d::Identity();
-}
+void GLFWViewer::Reset() { mode_mat_ = Eigen::Matrix4d::Identity(); }
 
 void GLFWViewer::Keyboard(int key) {
   switch (key) {

@@ -26,8 +26,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "gtest/gtest_prod.h"
-
 #include "modules/perception/proto/perception_obstacle.pb.h"
 #include "modules/planning/proto/decision.pb.h"
 #include "modules/planning/proto/sl_boundary.pb.h"
@@ -65,8 +63,6 @@ class PathObstacle {
   PathObstacle() = default;
   explicit PathObstacle(const Obstacle* obstacle);
 
-  bool Init(const ReferenceLine& reference_line, const double adc_start_s);
-
   const std::string& Id() const;
 
   const Obstacle* obstacle() const;
@@ -85,7 +81,9 @@ class PathObstacle {
 
   const std::string DebugString() const;
 
-  const SLBoundary& perception_sl_boundary() const;
+  const SLBoundary& PerceptionSLBoundary() const;
+
+  const StBoundary& reference_line_st_boundary() const;
 
   const StBoundary& st_boundary() const;
 
@@ -106,6 +104,12 @@ class PathObstacle {
 
   void EraseStBoundary();
 
+  void SetReferenceLineStBoundary(const StBoundary& boundary);
+
+  void SetReferenceLineStBoundaryType(const StBoundary::BoundaryType type);
+
+  void EraseReferenceLineStBoundary();
+
   bool HasLongitudinalDecision() const;
 
   bool HasNonIgnoreDecision() const;
@@ -120,28 +124,31 @@ class PathObstacle {
   bool IsLongitudinalIgnore() const;
   bool IsLateralIgnore() const;
 
- private:
+  void BuildReferenceLineStBoundary(const ReferenceLine& reference_line,
+                                    const double adc_start_s);
+
+  void SetPerceptionSlBoundary(const SLBoundary& sl_boundary);
+
+  /**
+   * @brief check if a ObjectDecisionType is a longitudinal decision.
+   **/
+  static bool IsLongitudinalDecision(const ObjectDecisionType& decision);
+
   /**
    * @brief check if a ObjectDecisionType is a lateral decision.
    **/
-  FRIEND_TEST(IsLateralDecision, AllDecisions);
   static bool IsLateralDecision(const ObjectDecisionType& decision);
 
-  /**
-   * @brief check if a ObjectDecisionType is longitudinal decision.
-   **/
-  FRIEND_TEST(IsLongitudinalDecision, AllDecisions);
-  static bool IsLongitudinalDecision(const ObjectDecisionType& decision);
+  void SetBlockingObstacle(bool blocking) { is_blocking_obstacle_ = blocking; }
+  bool IsBlockingObstacle() const { return is_blocking_obstacle_; }
 
+ private:
   FRIEND_TEST(MergeLongitudinalDecision, AllDecisions);
   static ObjectDecisionType MergeLongitudinalDecision(
       const ObjectDecisionType& lhs, const ObjectDecisionType& rhs);
   FRIEND_TEST(MergeLateralDecision, AllDecisions);
   static ObjectDecisionType MergeLateralDecision(const ObjectDecisionType& lhs,
                                                  const ObjectDecisionType& rhs);
-
-  void BuildStBoundary(const ReferenceLine& reference_line,
-                       const double adc_start_s);
 
   bool BuildTrajectoryStBoundary(const ReferenceLine& reference_line,
                                  const double adc_start_s,
@@ -154,10 +161,13 @@ class PathObstacle {
   std::vector<std::string> decider_tags_;
   SLBoundary perception_sl_boundary_;
 
+  StBoundary reference_line_st_boundary_;
   StBoundary st_boundary_;
 
   ObjectDecisionType lateral_decision_;
   ObjectDecisionType longitudinal_decision_;
+
+  bool is_blocking_obstacle_ = false;
 
   struct ObjectTagCaseHash {
     std::size_t operator()(

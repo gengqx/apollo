@@ -56,8 +56,8 @@ class RawStream {
   void push_gpgga(size_t length);
 
   static constexpr size_t BUFFER_SIZE = 2048;
-  uint8_t _buffer[BUFFER_SIZE];
-  uint8_t _buffer_rtk[BUFFER_SIZE];
+  uint8_t _buffer[BUFFER_SIZE] = {0};
+  uint8_t _buffer_rtk[BUFFER_SIZE] = {0};
 
   std::shared_ptr<Stream> _data_stream;
   std::shared_ptr<Stream> _command_stream;
@@ -80,7 +80,7 @@ class RawStream {
   const ros::Publisher _rtk_data_publisher;
   const ros::Publisher _stream_status_publisher;
 
-  boost::shared_ptr<apollo::common::gnss_status::StreamStatus> _stream_status;
+  boost::shared_ptr<apollo::drivers::gnss_status::StreamStatus> _stream_status;
   std::unique_ptr<std::thread> _data_thread_ptr;
   std::unique_ptr<std::thread> _rtk_thread_ptr;
 };

@@ -23,12 +23,12 @@
 
 #include <string>
 
-#include "ros/include/ros/ros.h"
-
 #include "modules/common/adapters/proto/adapter_config.pb.h"
 #include "modules/common/proto/pnc_point.pb.h"
 #include "modules/localization/proto/localization.pb.h"
 #include "modules/perception/proto/perception_obstacle.pb.h"
+#include "modules/planning/proto/planning.pb.h"
+#include "modules/map/relative_map/proto/navigation.pb.h"
 #include "modules/prediction/prediction_interface.h"
 #include "modules/prediction/proto/prediction_conf.pb.h"
 
@@ -81,10 +81,15 @@ class Prediction : public PredictionInterface {
 
   void OnLocalization(const localization::LocalizationEstimate &localization);
 
+  void OnPlanning(const planning::ADCTrajectory &adc_trajectory);
+
+  void OnRelativeMap(const relative_map::MapMsg& relative_map);
+
   bool IsValidTrajectoryPoint(
       const ::apollo::common::TrajectoryPoint &trajectory_point);
 
  private:
+  double start_time_ = 0.0;
   PredictionConf prediction_conf_;
   common::adapter::AdapterManagerConfig adapter_conf_;
 };

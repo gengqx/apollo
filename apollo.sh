@@ -67,7 +67,7 @@ function check_machine_arch() {
   fi
 
   #setup vtk folder name for different systems.
-  VTK_VERSION=$(find /usr/include/ -type d  -name "vtk-*" | cut -d '-' -f 2)
+  VTK_VERSION=$(find /usr/include/ -type d  -name "vtk-*" | tail -n1 | cut -d '-' -f 2)
   sed -i "s/VTK_VERSION/${VTK_VERSION}/g" WORKSPACE
 }
 
@@ -99,6 +99,10 @@ function generate_build_targets() {
   if ! $USE_ESD_CAN; then
      BUILD_TARGETS=$(echo $BUILD_TARGETS |tr ' ' '\n' | grep -v "esd")
   fi
+  #skip msf for non x86_64 platforms
+  if [ ${MACHINE_ARCH} != "x86_64" ]; then
+     BUILD_TARGETS=$(echo $BUILD_TARGETS |tr ' ' '\n' | grep -v "msf")
+  fi
 }
 
 #=================================================
@@ -125,14 +129,16 @@ function build() {
   # Build python proto
   build_py_proto
 
-  # Update task info template on compiling.
-  bazel-bin/modules/data/util/update_task_info --commit_id=$(git rev-parse HEAD)
+  # Clear KV DB and update commit_id after compiling.
+  rm -fr data/kv_db
+  python modules/tools/common/kv_db.py put \
+      "apollo:data:commit_id" "$(git rev-parse HEAD)"
 
   if [ -d /apollo-simulator ] && [ -e /apollo-simulator/build.sh ]; then
-      cd /apollo-simulator && bash build.sh build
-      if [ $? -ne 0 ]; then
-        fail 'Build failed!'
-      fi
+    cd /apollo-simulator && bash build.sh build
+    if [ $? -ne 0 ]; then
+      fail 'Build failed!'
+    fi
   fi
   if [ $? -eq 0 ]; then
     success 'Build passed!'
@@ -154,7 +160,7 @@ function cibuild() {
   //modules/prediction
   //modules/routing
   "
-  bazel build $DEFINES -c dbg $@ $BUILD_TARGETS
+  bazel build $DEFINES $@ $BUILD_TARGETS
   if [ $? -eq 0 ]; then
     success 'Build passed!'
   else
@@ -177,6 +183,7 @@ function build_py_proto() {
   mkdir py_proto
   PROTOC='./bazel-out/host/bin/external/com_google_protobuf/protoc'
   find modules/ -name "*.proto" \
+      | grep -v node_modules \
       | grep -v modules/drivers/gnss \
       | xargs ${PROTOC} --python_out=py_proto
   find py_proto/* -type d -exec touch "{}/__init__.py" \;
@@ -209,17 +216,17 @@ function warn_proprietary_sw() {
 function release() {
   RELEASE_DIR="${HOME}/.cache/apollo_release"
   if [ -d "${RELEASE_DIR}" ]; then
-    rm -fr "${RELEASE_DIR}"
+    rm -rf "${RELEASE_DIR}"
   fi
-  APOLLO_DIR="${RELEASE_DIR}/apollo"
-  mkdir -p "${APOLLO_DIR}"
+  APOLLO_RELEASE_DIR="${RELEASE_DIR}/apollo"
+  mkdir -p "${APOLLO_RELEASE_DIR}"
 
   # Find binaries and convert from //path:target to path/target
   BINARIES=$(bazel query "kind(cc_binary, //...)" | sed 's/^\/\///' | sed 's/:/\//')
   # Copy binaries to release dir.
   for BIN in ${BINARIES}; do
     SRC_PATH="bazel-bin/${BIN}"
-    DST_PATH="${APOLLO_DIR}/${BIN}"
+    DST_PATH="${APOLLO_RELEASE_DIR}/${BIN}"
     if [ -e "${SRC_PATH}" ]; then
       mkdir -p "$(dirname "${DST_PATH}")"
       cp "${SRC_PATH}" "${DST_PATH}"
@@ -227,53 +234,38 @@ function release() {
   done
 
   # modules data and conf
-  MODULES_DIR="${APOLLO_DIR}/modules"
-  mkdir -p $MODULES_DIR
-  for m in common control canbus localization decision perception dreamview map \
-       prediction planning routing calibration third_party_perception monitor \
-       drivers/delphi_esr \
-       drivers/gnss \
-       drivers/conti_radar
-  do
-    TARGET_DIR=$MODULES_DIR/$m
-    mkdir -p $TARGET_DIR
-    if [ -d modules/$m/conf ]; then
-      cp -r modules/$m/conf $TARGET_DIR
-    fi
-    if [ -d modules/$m/data ]; then
-      cp -r modules/$m/data $TARGET_DIR
+  CONFS=$(find modules/ -name "conf")
+  DATAS=$(find modules/ -name "data")
+  OTHER=("modules/tools"
+         "modules/perception/model")
+  rm -rf test/*
+  for conf in $CONFS; do
+    mkdir -p $APOLLO_RELEASE_DIR/$conf
+    rsync -a $conf/* $APOLLO_RELEASE_DIR/$conf
+  done
+  for data in $DATAS; do
+    mkdir -p $APOLLO_RELEASE_DIR/$data
+    if [ $data != "modules/map/data" ]; then
+      rsync -a $data/* $APOLLO_RELEASE_DIR/$data
     fi
   done
+  # Other
+  for path in "${OTHER[@]}"; do
+    mkdir -p $APOLLO_RELEASE_DIR/$path
+    rsync -a $path/* $APOLLO_RELEASE_DIR/$path
+  done
+
+  # dreamview frontend
+  cp -a modules/dreamview/frontend $APOLLO_RELEASE_DIR/modules/dreamview
 
   # remove all pyc file in modules/
   find modules/ -name "*.pyc" | xargs -I {} rm {}
 
-  # tools
-  cp -r modules/tools $MODULES_DIR
-
-  # ros
-  cp -Lr bazel-apollo/external/ros ${APOLLO_DIR}/
-  rm -f ${APOLLO_DIR}/ros/*.tar.gz
-
   # scripts
-  cp -r scripts ${APOLLO_DIR}
-
-  # dreamview runfiles
-  cp -Lr bazel-bin/modules/dreamview/dreamview.runfiles/apollo/modules/dreamview/frontend $MODULES_DIR/dreamview
-
-  # perception model
-  cp -r modules/perception/model/ $MODULES_DIR/perception
-
-  # velodyne launch
-  mkdir -p $MODULES_DIR/drivers/velodyne/velodyne
-  cp -r modules/drivers/velodyne/velodyne/launch $MODULES_DIR/drivers/velodyne/velodyne
-
-  # usb_cam launch
-  mkdir -p $MODULES_DIR/drivers/usb_cam
-  cp -r modules/drivers/usb_cam/launch $MODULES_DIR/drivers/usb_cam
+  cp -r scripts ${APOLLO_RELEASE_DIR}
 
   # lib
-  LIB_DIR="${APOLLO_DIR}/lib"
+  LIB_DIR="${APOLLO_RELEASE_DIR}/lib"
   mkdir "${LIB_DIR}"
   if $USE_ESD_CAN; then
     warn_proprietary_sw
@@ -284,25 +276,18 @@ function release() {
   fi
   cp -r bazel-genfiles/external $LIB_DIR
   cp -r py_proto/modules $LIB_DIR
+  cp ./modules/perception/cuda_util/build/libcuda_util.so $LIB_DIR
 
   # doc
-  cp -r docs "${APOLLO_DIR}"
-  cp LICENSE "${APOLLO_DIR}"
-  cp third_party/ACKNOWLEDGEMENT.txt "${APOLLO_DIR}"
+  cp -r docs "${APOLLO_RELEASE_DIR}"
+  cp LICENSE "${APOLLO_RELEASE_DIR}"
+  cp third_party/ACKNOWLEDGEMENT.txt "${APOLLO_RELEASE_DIR}"
 
   # release info
-  META="${APOLLO_DIR}/meta.ini"
-  echo "[Release]" > $META
+  META="${APOLLO_RELEASE_DIR}/meta.ini"
   echo "git_commit: $(git rev-parse HEAD)" >> $META
-  echo "car_type : LINCOLN.MKZ" >> $META
-  echo "arch : ${MACHINE_ARCH}" >> $META
-
-  # system libs
-  for LIB_PATH in /usr/local/local_integ/lib; do
-    DST_PATH="$(dirname "${RELEASE_DIR}${LIB_PATH}")"
-    mkdir -p "${DST_PATH}"
-    cp -r "${LIB_PATH}" "${DST_PATH}"
-  done
+  echo "car_type: LINCOLN.MKZ" >> $META
+  echo "arch: ${MACHINE_ARCH}" >> $META
 }
 
 function gen_coverage() {
@@ -352,7 +337,7 @@ function run_test() {
     echo -e "${RED}Need GPU to run the tests.${NO_COLOR}"
     echo "$BUILD_TARGETS" | xargs bazel test $DEFINES --config=unit_test -c dbg --test_verbose_timeout_warnings $@
   else
-    echo "$BUILD_TARGETS" | grep -v "cnn_segmentation_test" | xargs bazel test $DEFINES --config=unit_test -c dbg --test_verbose_timeout_warnings $@
+    echo "$BUILD_TARGETS" | grep -v "cnn_segmentation_test" | grep -v "yolo_camera_detector_test" | xargs bazel test $DEFINES --config=unit_test -c dbg --test_verbose_timeout_warnings $@
   fi
   if [ $? -ne 0 ]; then
     fail 'Test failed!'
@@ -382,7 +367,7 @@ function citest() {
   //modules/prediction/container/obstacles:obstacle_test
   //modules/dreamview/backend/simulation_world:simulation_world_service_test
   "
-  bazel test $DEFINES --config=unit_test -c dbg --test_verbose_timeout_warnings $@ $BUILD_TARGETS
+  bazel test $DEFINES --config=unit_test --test_verbose_timeout_warnings $@ $BUILD_TARGETS
   if [ $? -eq 0 ]; then
     success 'Test passed!'
     return 0
@@ -571,7 +556,7 @@ function print_usage() {
   ${BLUE}build_gpu${NONE}: run build only with Caffe GPU mode support
   ${BLUE}build_gnss${NONE}: build gnss driver
   ${BLUE}build_velodyne${NONE}: build velodyne driver
-  ${BLUE}build_usbcam${NONE}: build velodyne driver
+  ${BLUE}build_usbcam${NONE}: build usb camera driver
   ${BLUE}build_opt_gpu${NONE}: build optimized binary with Caffe GPU mode support
   ${BLUE}build_fe${NONE}: compile frontend javascript code, this requires all the node_modules to be installed already
   ${BLUE}build_no_perception [dbg|opt]${NONE}: run build build skip building perception module, useful when some perception dependencies are not satisified, e.g., CUDA, CUDNN, LIDAR, etc.

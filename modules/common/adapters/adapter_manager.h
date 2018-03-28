@@ -61,6 +61,16 @@ namespace adapter {
   static name##Adapter *Get##name() {                                          \
     return instance()->InternalGet##name();                                    \
   }                                                                            \
+  static AdapterConfig &Get##name##Config() {                                  \
+    return instance()->name##config_;                                          \
+  }                                                                            \
+  static void Feed##name##Data(const name##Adapter::DataType &data) {          \
+    if (!instance()->name##_) {                                                \
+      AERROR << "Initialize adapter before feeding protobuf";                  \
+      return;                                                                  \
+    }                                                                          \
+    Get##name()->FeedData(data);                                               \
+  }                                                                            \
   static bool Feed##name##File(const std::string &proto_file) {                \
     if (!instance()->name##_) {                                                \
       AERROR << "Initialize adapter before feeding protobuf";                  \
@@ -101,6 +111,7 @@ namespace adapter {
   std::unique_ptr<name##Adapter> name##_;                                      \
   ros::Publisher name##publisher_;                                             \
   ros::Subscriber name##subscriber_;                                           \
+  AdapterConfig name##config_;                                                 \
                                                                                \
   void InternalEnable##name(const std::string &topic_name,                     \
                             const AdapterConfig &config) {                     \
@@ -109,7 +120,7 @@ namespace adapter {
     if (config.mode() != AdapterConfig::PUBLISH_ONLY && IsRos()) {             \
       name##subscriber_ =                                                      \
           node_handle_->subscribe(topic_name, config.message_history_limit(),  \
-                                  &name##Adapter::OnReceive, name##_.get());   \
+                                  &name##Adapter::RosCallback, name##_.get()); \
     }                                                                          \
     if (config.mode() != AdapterConfig::RECEIVE_ONLY && IsRos()) {             \
       name##publisher_ = node_handle_->advertise<name##Adapter::DataType>(     \
@@ -117,10 +128,9 @@ namespace adapter {
     }                                                                          \
                                                                                \
     observers_.push_back([this]() { name##_->Observe(); });                    \
+    name##config_ = config;                                                    \
   }                                                                            \
-  name##Adapter *InternalGet##name() {                                         \
-    return name##_.get();                                                      \
-  }                                                                            \
+  name##Adapter *InternalGet##name() { return name##_.get(); }                 \
   void InternalPublish##name(const name##Adapter::DataType &data) {            \
     /* Only publish ROS msg if node handle is initialized. */                  \
     if (IsRos()) {                                                             \
@@ -188,9 +198,7 @@ class AdapterManager {
   /**
    * @brief Returns whether AdapterManager is running ROS mode.
    */
-  static bool IsRos() {
-    return instance()->node_handle_ != nullptr;
-  }
+  static bool IsRos() { return instance()->node_handle_ != nullptr; }
 
   /**
    * @brief Returns a reference to static tf2 buffer.
@@ -246,6 +254,7 @@ class AdapterManager {
   REGISTER_ADAPTER(PerceptionObstacles);
   REGISTER_ADAPTER(Planning);
   REGISTER_ADAPTER(PointCloud);
+  REGISTER_ADAPTER(ImageFront);
   REGISTER_ADAPTER(ImageShort);
   REGISTER_ADAPTER(ImageLong);
   REGISTER_ADAPTER(Prediction);
@@ -257,9 +266,11 @@ class AdapterManager {
   REGISTER_ADAPTER(InsStatus);
   REGISTER_ADAPTER(GnssStatus);
   REGISTER_ADAPTER(SystemStatus);
+  REGISTER_ADAPTER(StaticInfo);
   REGISTER_ADAPTER(Mobileye);
   REGISTER_ADAPTER(DelphiESR);
   REGISTER_ADAPTER(ContiRadar);
+  REGISTER_ADAPTER(Ultrasonic);
   REGISTER_ADAPTER(CompressedImage);
   REGISTER_ADAPTER(GnssRtkObs);
   REGISTER_ADAPTER(GnssRtkEph);
@@ -267,6 +278,12 @@ class AdapterManager {
   REGISTER_ADAPTER(LocalizationMsfGnss);
   REGISTER_ADAPTER(LocalizationMsfLidar);
   REGISTER_ADAPTER(LocalizationMsfSinsPva);
+  REGISTER_ADAPTER(LocalizationMsfStatus);
+  REGISTER_ADAPTER(DriveEvent);
+  REGISTER_ADAPTER(RelativeMap);
+  REGISTER_ADAPTER(Navigation);
+  REGISTER_ADAPTER(VoiceDetectionRequest);
+  REGISTER_ADAPTER(VoiceDetectionResponse);
 
   DECLARE_SINGLETON(AdapterManager);
 };

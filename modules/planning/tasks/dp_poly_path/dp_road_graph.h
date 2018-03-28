@@ -22,11 +22,11 @@
 #define MODULES_PLANNING_TASKS_DP_POLY_PATH_DP_ROAD_GRAPH_H_
 
 #include <limits>
-#include <string>
-#include <utility>
+#include <list>
 #include <vector>
 
 #include "modules/common/proto/pnc_point.pb.h"
+#include "modules/planning/proto/dp_poly_path_config.pb.h"
 
 #include "modules/common/status/status.h"
 #include "modules/planning/common/path/path_data.h"
@@ -36,8 +36,8 @@
 #include "modules/planning/common/speed/speed_data.h"
 #include "modules/planning/common/trajectory/discretized_trajectory.h"
 #include "modules/planning/math/curve1d/quintic_polynomial_curve1d.h"
-#include "modules/planning/proto/dp_poly_path_config.pb.h"
 #include "modules/planning/reference_line/reference_point.h"
+#include "modules/planning/tasks/dp_poly_path/trajectory_cost.h"
 
 namespace apollo {
 namespace planning {
@@ -54,6 +54,10 @@ class DPRoadGraph {
                       const std::vector<const PathObstacle *> &obstacles,
                       PathData *const path_data);
 
+  void SetDebugLogger(apollo::planning_internal::Debug *debug) {
+    planning_debug_ = debug;
+  }
+
  private:
   /**
    * an private inner struct for the dp algorithm
@@ -67,12 +71,14 @@ class DPRoadGraph {
         : sl_point(point_sl), min_cost_prev_node(node_prev) {}
 
     DPRoadGraphNode(const common::SLPoint point_sl,
-                    const DPRoadGraphNode *node_prev, const double cost)
+                    const DPRoadGraphNode *node_prev,
+                    const ComparableCost &cost)
         : sl_point(point_sl), min_cost_prev_node(node_prev), min_cost(cost) {}
 
     void UpdateCost(const DPRoadGraphNode *node_prev,
-                    const QuinticPolynomialCurve1d &curve, const double cost) {
-      if (cost < min_cost) {
+                    const QuinticPolynomialCurve1d &curve,
+                    const ComparableCost &cost) {
+      if (cost <= min_cost) {
         min_cost = cost;
         min_cost_prev_node = node_prev;
         min_cost_curve = curve;
@@ -81,7 +87,9 @@ class DPRoadGraph {
 
     common::SLPoint sl_point;
     const DPRoadGraphNode *min_cost_prev_node = nullptr;
-    double min_cost = std::numeric_limits<double>::infinity();
+    ComparableCost min_cost = {true, true, true,
+                               std::numeric_limits<double>::infinity(),
+                               std::numeric_limits<double>::infinity()};
     QuinticPolynomialCurve1d min_cost_curve;
   };
 
@@ -94,6 +102,20 @@ class DPRoadGraph {
 
   bool CalculateFrenetPoint(const common::TrajectoryPoint &traj_point,
                             common::FrenetFramePoint *const frenet_frame_point);
+  bool IsSafeForLaneChange();
+
+  bool IsValidCurve(const QuinticPolynomialCurve1d &curve) const;
+
+  void GetCurveCost(TrajectoryCost trajectory_cost,
+                    const QuinticPolynomialCurve1d &curve, const double start_s,
+                    const double end_s, const uint32_t curr_level,
+                    const uint32_t total_level, ComparableCost *cost);
+
+  void UpdateNode(const std::list<DPRoadGraphNode> &prev_nodes,
+                  const uint32_t level, const uint32_t total_level,
+                  TrajectoryCost *trajectory_cost, DPRoadGraphNode *front,
+                  DPRoadGraphNode *cur_node);
+  bool HasSidepass();
 
  private:
   DpPolyPathConfig config_;
@@ -103,6 +125,9 @@ class DPRoadGraph {
   SpeedData speed_data_;
   common::SLPoint init_sl_point_;
   common::FrenetFramePoint init_frenet_frame_point_;
+  apollo::planning_internal::Debug *planning_debug_ = nullptr;
+
+  ObjectSidePass sidepass_;
 };
 
 }  // namespace planning

@@ -21,24 +21,26 @@
 #include <vector>
 
 #include "modules/common/log.h"
-#include "modules/localization/msf/common/util/system_utility.h"
+#include "modules/common/util/file.h"
 #include "modules/localization/msf/local_map/base_map/base_map_matrix.h"
 
 namespace apollo {
 namespace localization {
 namespace msf {
 
+using apollo::common::util::DirectoryExists;
+using apollo::common::util::EnsureDirectory;
+
 BaseMapNode::BaseMapNode(BaseMapMatrix* matrix, CompressionStrategy* strategy)
-    : map_matrix_(matrix), compression_strategy_(strategy) {
-  is_changed_ = false;
-  data_is_ready_ = false;
-  is_reserved_ = false;
-  min_altitude_ = 1e6;
-}
+    : map_matrix_(matrix), compression_strategy_(strategy) {}
 
 BaseMapNode::~BaseMapNode() {
-  delete map_matrix_;
-  delete compression_strategy_;
+  if (map_matrix_ != nullptr) {
+    delete map_matrix_;
+  }
+  if (compression_strategy_ != nullptr) {
+    delete compression_strategy_;
+  }
 }
 
 void BaseMapNode::Init(const BaseMapConfig* map_config,
@@ -84,16 +86,16 @@ bool BaseMapNode::Save() {
   SaveIntensityImage();
   char buf[1024];
   std::string path = map_config_->map_folder_path_;
-  if (!CreateMapDirectory(path)) {
+  if (!EnsureDirectory(path)) {
     return false;
   }
   path = path + "/map";
-  if (!CreateMapDirectory(path)) {
+  if (!EnsureDirectory(path)) {
     return false;
   }
   snprintf(buf, sizeof(buf), "/%03u", index_.resolution_id_);
   path = path + buf;
-  if (!CreateMapDirectory(path)) {
+  if (!EnsureDirectory(path)) {
     return false;
   }
   if (index_.zone_id_ > 0) {
@@ -101,20 +103,20 @@ bool BaseMapNode::Save() {
   } else {
     path = path + "/south";
   }
-  if (!CreateMapDirectory(path)) {
+  if (!EnsureDirectory(path)) {
     return false;
   }
   snprintf(buf, sizeof(buf), "/%02d", abs(index_.zone_id_));
   path = path + buf;
-  if (!CreateMapDirectory(path)) {
+  if (!EnsureDirectory(path)) {
     return false;
   }
-  snprintf(buf, sizeof(buf), "/%08u", abs(index_.m_));
+  snprintf(buf, sizeof(buf), "/%08u", index_.m_);
   path = path + buf;
-  if (!CreateMapDirectory(path)) {
+  if (!EnsureDirectory(path)) {
     return false;
   }
-  snprintf(buf, sizeof(buf), "/%08u", abs(index_.n_));
+  snprintf(buf, sizeof(buf), "/%08u", index_.n_);
   path = path + buf;
 
   AINFO << "Save node: " << path;
@@ -134,16 +136,16 @@ bool BaseMapNode::Save() {
 bool BaseMapNode::Load() {
   char buf[1024];
   std::string path = map_config_->map_folder_path_;
-  if (!(system::IsExists(path) && system::IsDirectory(path))) {
+  if (!DirectoryExists(path)) {
     return false;
   }
   path = path + "/map";
-  if (!(system::IsExists(path) && system::IsDirectory(path))) {
+  if (!DirectoryExists(path)) {
     return false;
   }
   snprintf(buf, sizeof(buf), "/%03u", index_.resolution_id_);
   path = path + buf;
-  if (!(system::IsExists(path) && system::IsDirectory(path))) {
+  if (!DirectoryExists(path)) {
     return false;
   }
   if (index_.zone_id_ > 0) {
@@ -151,20 +153,20 @@ bool BaseMapNode::Load() {
   } else {
     path = path + "/south";
   }
-  if (!(system::IsExists(path) && system::IsDirectory(path))) {
+  if (!DirectoryExists(path)) {
     return false;
   }
   snprintf(buf, sizeof(buf), "/%02d", abs(index_.zone_id_));
   path = path + buf;
-  if (!(system::IsExists(path) && system::IsDirectory(path))) {
+  if (!DirectoryExists(path)) {
     return false;
   }
-  snprintf(buf, sizeof(buf), "/%08u", abs(index_.m_));
+  snprintf(buf, sizeof(buf), "/%08u", index_.m_);
   path = path + buf;
-  if (!(system::IsExists(path) && system::IsDirectory(path))) {
+  if (!DirectoryExists(path)) {
     return false;
   }
-  snprintf(buf, sizeof(buf), "/%08u", abs(index_.n_));
+  snprintf(buf, sizeof(buf), "/%08u", index_.n_);
   path = path + buf;
 
   return Load(path.c_str());
@@ -295,7 +297,7 @@ unsigned int BaseMapNode::GetHeaderBinarySize() const {
 // }
 
 unsigned int BaseMapNode::LoadBodyBinary(std::vector<unsigned char>* buf) {
-  if (compression_strategy_ == NULL) {
+  if (compression_strategy_ == nullptr) {
     return map_matrix_->LoadBinary(&((*buf)[0]));
   }
   std::vector<unsigned char> buf_uncompressed;
@@ -307,7 +309,7 @@ unsigned int BaseMapNode::LoadBodyBinary(std::vector<unsigned char>* buf) {
 
 unsigned int BaseMapNode::CreateBodyBinary(
     std::vector<unsigned char>* buf) const {
-  if (compression_strategy_ == NULL) {
+  if (compression_strategy_ == nullptr) {
     unsigned int body_size = GetBodyBinarySize();
     buf->resize(body_size);
     map_matrix_->CreateBinary(&((*buf)[0]), body_size);
@@ -418,36 +420,24 @@ Eigen::Vector2d BaseMapNode::GetLeftTopCorner(const BaseMapConfig& config,
   coord[1] = config.map_range_.GetMinY() +
              config.map_node_size_y_ *
                  config.map_resolutions_[index.resolution_id_] * index.m_;
-  assert(coord[0] < config.map_range_.GetMaxX());
-  assert(coord[1] < config.map_range_.GetMaxY());
+  DCHECK_LT(coord[0], config.map_range_.GetMaxX());
+  DCHECK_LT(coord[1], config.map_range_.GetMaxY());
   return coord;
-}
-
-bool BaseMapNode::CreateMapDirectory(const std::string& path) const {
-  if (system::IsExists(path)) {
-    if (!system::IsDirectory(path)) {
-      return false;
-    } else {
-      return true;
-    }
-  } else {
-    return system::CreateDirectory(path);
-  }
 }
 
 bool BaseMapNode::SaveIntensityImage() const {
   char buf[1024];
   std::string path = map_config_->map_folder_path_;
-  if (!CreateMapDirectory(path)) {
+  if (!EnsureDirectory(path)) {
     return false;
   }
   path = path + "/image";
-  if (!CreateMapDirectory(path)) {
+  if (!EnsureDirectory(path)) {
     return false;
   }
   snprintf(buf, sizeof(buf), "/%03u", index_.resolution_id_);
   path = path + buf;
-  if (!CreateMapDirectory(path)) {
+  if (!EnsureDirectory(path)) {
     return false;
   }
   if (index_.zone_id_ > 0) {
@@ -455,20 +445,20 @@ bool BaseMapNode::SaveIntensityImage() const {
   } else {
     path = path + "/south";
   }
-  if (!CreateMapDirectory(path)) {
+  if (!EnsureDirectory(path)) {
     return false;
   }
   snprintf(buf, sizeof(buf), "/%02d", abs(index_.zone_id_));
   path = path + buf;
-  if (!CreateMapDirectory(path)) {
+  if (!EnsureDirectory(path)) {
     return false;
   }
-  snprintf(buf, sizeof(buf), "/%08u", abs(index_.m_));
+  snprintf(buf, sizeof(buf), "/%08u", index_.m_);
   path = path + buf;
-  if (!CreateMapDirectory(path)) {
+  if (!EnsureDirectory(path)) {
     return false;
   }
-  snprintf(buf, sizeof(buf), "/%08u.png", abs(index_.n_));
+  snprintf(buf, sizeof(buf), "/%08u.png", index_.n_);
   path = path + buf;
   bool success0 = SaveIntensityImage(path);
   return success0;

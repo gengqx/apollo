@@ -21,6 +21,7 @@
 #ifndef MODULES_PLANNING_COMMON_REFERENCE_LINE_INFO_H_
 #define MODULES_PLANNING_COMMON_REFERENCE_LINE_INFO_H_
 
+#include <algorithm>
 #include <limits>
 #include <list>
 #include <memory>
@@ -28,8 +29,10 @@
 #include <unordered_set>
 #include <vector>
 
+#include "modules/common/proto/drive_state.pb.h"
 #include "modules/common/proto/pnc_point.pb.h"
-#include "modules/common/proto/vehicle_state.pb.h"
+#include "modules/common/vehicle_state/proto/vehicle_state.pb.h"
+#include "modules/planning/proto/lattice_structure.pb.h"
 #include "modules/planning/proto/planning.pb.h"
 
 #include "modules/map/pnc_map/pnc_map.h"
@@ -41,6 +44,10 @@
 namespace apollo {
 namespace planning {
 
+/**
+ * @class ReferenceLineInfo
+ * @brief ReferenceLineInfo holds all data for one reference line.
+ */
 class ReferenceLineInfo {
  public:
   explicit ReferenceLineInfo(const common::VehicleState& vehicle_state,
@@ -48,10 +55,13 @@ class ReferenceLineInfo {
                              const ReferenceLine& reference_line,
                              const hdmap::RouteSegments& segments);
 
-  bool Init();
+  bool Init(const std::vector<const Obstacle*>& obstacles);
+
+  bool IsInited() const;
 
   bool AddObstacles(const std::vector<const Obstacle*>& obstacles);
   PathObstacle* AddObstacle(const Obstacle* obstacle);
+  void AddObstacleHelper(const Obstacle* obstacle, int* ret);
 
   PathDecision* path_decision();
   const PathDecision& path_decision() const;
@@ -63,11 +73,17 @@ class ReferenceLineInfo {
   void SetTrajectory(const DiscretizedTrajectory& trajectory);
 
   const DiscretizedTrajectory& trajectory() const;
-  const double TrajectoryLength() const;
+  double TrajectoryLength() const;
 
   double Cost() const { return cost_; }
   void AddCost(double cost) { cost_ += cost; }
   void SetCost(double cost) { cost_ = cost; }
+  double PriorityCost() const { return priority_cost_; }
+  void SetPriorityCost(double cost) { priority_cost_ = cost; }
+  // For lattice planner'speed planning target
+  void SetStopPoint(const StopPoint& stop_point);
+  void SetCruiseSpeed(double speed);
+  const PlanningTarget& planning_target() const { return planning_target_; }
 
   /**
    * @brief check if current reference line is started from another reference
@@ -104,23 +120,35 @@ class ReferenceLineInfo {
    * Set if the vehicle can drive following this reference line
    * A planner need to set this value to true if the reference line is OK
    */
-  void SetDriable(bool drivable);
+  void SetDrivable(bool drivable);
   bool IsDrivable() const;
 
+  void ExportEngageAdvice(common::EngageAdvice* engage_advice) const;
+
   const hdmap::RouteSegments& Lanes() const;
+  const std::list<hdmap::Id> TargetLaneId() const;
 
   void ExportDecision(DecisionResult* decision_result) const;
 
-  void SetRightOfWayStatus() { status_ = ADCTrajectory::PROTECTED; }
-  ADCTrajectory::RightOfWayStatus GetRightOfWayStatus() const {
-    return status_;
+  void SetJunctionRightOfWay(double junction_s, bool is_protected);
+
+  ADCTrajectory::RightOfWayStatus GetRightOfWayStatus() const;
+
+  bool IsRightTurnPath() const;
+
+  double OffsetToOtherReferenceLine() const {
+    return offset_to_other_reference_line_;
   }
+  void SetOffsetToOtherReferenceLine(const double offset) {
+    offset_to_other_reference_line_ = offset;
+  }
+
+  void set_is_on_reference_line() { is_on_reference_line_ = true; }
 
  private:
   void ExportTurnSignal(common::VehicleSignal* signal) const;
 
-  std::unique_ptr<PathObstacle> CreatePathObstacle(const Obstacle* obstacle);
-  bool InitPerceptionSLBoundary(PathObstacle* path_obstacle);
+  bool IsUnrelaventObstacle(PathObstacle* path_obstacle);
 
   void MakeDecision(DecisionResult* decision_result) const;
   int MakeMainStopDecision(DecisionResult* decision_result) const;
@@ -129,7 +157,7 @@ class ReferenceLineInfo {
   void SetObjectDecisions(ObjectDecisions* object_decisions) const;
   const common::VehicleState vehicle_state_;
   const common::TrajectoryPoint adc_planning_point_;
-  const ReferenceLine reference_line_;
+  ReferenceLine reference_line_;
 
   /**
    * @brief this is the number that measures the goodness of this reference
@@ -137,7 +165,9 @@ class ReferenceLineInfo {
    */
   double cost_ = 0.0;
 
-  bool is_drivable_ = false;
+  bool is_inited_ = false;
+
+  bool is_drivable_ = true;
 
   PathDecision path_decision_;
 
@@ -153,7 +183,15 @@ class ReferenceLineInfo {
 
   hdmap::RouteSegments lanes_;
 
+  bool is_on_reference_line_ = false;
+
   ADCTrajectory::RightOfWayStatus status_ = ADCTrajectory::UNPROTECTED;
+
+  double offset_to_other_reference_line_ = 0.0;
+
+  double priority_cost_ = 0.0;
+
+  PlanningTarget planning_target_;
 
   DISALLOW_COPY_AND_ASSIGN(ReferenceLineInfo);
 };

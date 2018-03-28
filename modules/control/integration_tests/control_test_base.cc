@@ -21,7 +21,6 @@
 
 #include "google/protobuf/text_format.h"
 #include "modules/common/adapters/adapter_manager.h"
-#include "modules/common/monitor/proto/monitor.pb.h"
 #include "modules/common/util/file.h"
 #include "modules/common/util/util.h"
 #include "modules/control/integration_tests/control_test_base.h"
@@ -34,8 +33,7 @@ DEFINE_string(test_localization_file, "", "localization input file");
 DEFINE_string(test_monitor_file, "", "montor input file");
 DEFINE_string(test_pad_file, "", "pad message input file");
 DEFINE_string(test_planning_file, "", "planning input file");
-DEFINE_bool(test_update_golden_log, false,
-            "true to update decision golden log file.");
+DEFINE_bool(test_update_golden_log, false, "true to update golden log file.");
 
 namespace apollo {
 namespace control {

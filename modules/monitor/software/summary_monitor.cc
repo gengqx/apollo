@@ -115,15 +115,23 @@ void SummaryMonitor::RunOnce(const double current_time) {
     system_status_fp_ = new_fp;
     last_broadcast_ = current_time;
   }
+
+  // Print and publish all monitor logs.
+  MonitorManager::LogBuffer().PrintLog();
+  MonitorManager::LogBuffer().Publish();
 }
 
 void SummaryMonitor::SummarizeModules() {
   for (auto &module : *MonitorManager::GetStatus()->mutable_modules()) {
     ModuleStatus *status = &(module.second);
 
-    if (status->has_process_status() && !status->process_status().running()) {
-      UpdateStatusSummary(Summary::FATAL, "No process", status);
-      continue;
+    if (status->has_process_status()) {
+      if (status->process_status().running()) {
+        UpdateStatusSummary(Summary::OK, "", status);
+      } else {
+        UpdateStatusSummary(Summary::FATAL, "No process", status);
+        continue;
+      }
     }
 
     if (status->has_topic_status()) {
@@ -140,16 +148,18 @@ void SummaryMonitor::SummarizeHardware() {
     if (status->has_status()) {
       switch (status->status()) {
         case HardwareStatus::NOT_PRESENT:
-          UpdateStatusSummary(Summary::FATAL, "", status);
+          UpdateStatusSummary(Summary::FATAL, status->msg(), status);
           break;
-        case HardwareStatus::NOT_READY:
-          UpdateStatusSummary(Summary::WARN, "", status);
+        case HardwareStatus::NOT_READY:  // Fall through.
+        case HardwareStatus::GPS_UNSTABLE_WARNING:
+          UpdateStatusSummary(Summary::WARN, status->msg(), status);
           break;
         case HardwareStatus::OK:
-          UpdateStatusSummary(Summary::OK, "", status);
+          UpdateStatusSummary(Summary::OK, status->msg(), status);
           break;
+        case HardwareStatus::GPS_UNSTABLE_ERROR:  // Fall through.
         default:
-          UpdateStatusSummary(Summary::ERROR, "", status);
+          UpdateStatusSummary(Summary::ERROR, status->msg(), status);
           break;
       }
     }

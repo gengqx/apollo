@@ -54,14 +54,18 @@ export default class Meters {
 
             if (world.autoDrivingCar.speed !== undefined) {
                 // Convert the unit from m/s to mph.
-                this.speed = meterPerSecondToKmPerHour(world.autoDrivingCar.speed);
+                this.speed = world.autoDrivingCar.speed;
             }
 
-            if (world.autoDrivingCar.steeringAngle !== undefined) {
-                this.steeringPercentage = world.autoDrivingCar.steeringAngle;
+            if (world.autoDrivingCar.steeringPercentage !== undefined &&
+                !isNaN(world.autoDrivingCar.steeringPercentage)) {
+                this.steeringPercentage = Math.round(world.autoDrivingCar.steeringPercentage);
+            }
 
-                // TODO(siyangy): Avoid magic number here.
-                this.steeringAngle = -Math.round(world.autoDrivingCar.steeringAngle * 4.7);
+            if (world.autoDrivingCar.steeringAngle !== undefined &&
+                !isNaN(world.autoDrivingCar.steeringAngle)) {
+                this.steeringAngle = -Math.round(
+                    world.autoDrivingCar.steeringAngle * 180.0 / Math.PI);
             }
 
             if (world.autoDrivingCar.disengageType !== undefined) {

@@ -27,6 +27,8 @@
 #include "modules/common/adapters/adapter_manager.h"
 #include "modules/dreamview/backend/common/dreamview_gflags.h"
 #include "modules/dreamview/backend/map/map_service.h"
+#include "modules/dreamview/backend/sim_control/sim_control_interface.h"
+#include "modules/map/relative_map/proto/navigation.pb.h"
 
 /**
  * @namespace apollo::dreamview
@@ -41,7 +43,7 @@ namespace dreamview {
  * an ideal world where the car can be perfectly placed wherever the planning
  * asks it to be, with the expected speed, acceleration, etc.
  */
-class SimControl {
+class SimControl : SimControlInterface {
  public:
   /**
    * @brief Constructor of SimControl.
@@ -49,37 +51,43 @@ class SimControl {
    */
   explicit SimControl(const MapService *map_service);
 
+  inline bool IsEnabled() const {
+    return enabled_;
+  }
+
   /**
    * @brief setup callbacks and timer
    * @param set_start_point initialize localization.
    */
   void Init(bool set_start_point, double start_velocity = 0.0,
-            double start_acceleration = 0.0);
+            double start_acceleration = 0.0) override;
 
   /**
    * @brief Starts the timer to publish simulated localization and chassis
    * messages.
    */
-  void Start();
+  void Start() override;
 
   /**
    * @brief Stops the timer.
    */
-  void Stop();
+  void Stop() override;
 
   /**
-   * @brief Clears the current received planning data.
+   * @brief Resets the internal state.
    */
-  void ClearPlanning();
+  void Reset() override;
 
   /**
    * @brief Publish simulated localization and chassis.
    */
-  void RunOnce();
+  void RunOnce() override;
 
  private:
   void OnPlanning(const apollo::planning::ADCTrajectory &trajectory);
   void OnRoutingResponse(const apollo::routing::RoutingResponse &routing);
+  void OnReceiveNavigationInfo(
+      const relative_map::NavigationInfo &navigation_info);
 
   // Reset the start point, which can be a dummy point on the map or received
   // from the routing module.
@@ -94,6 +102,8 @@ class SimControl {
 
   void PublishChassis(double lambda);
   void PublishLocalization(double lambda);
+
+  void ClearPlanning();
 
   template <typename T>
   T Interpolate(T prev, T next, double lambda) {
@@ -123,8 +133,9 @@ class SimControl {
 
   bool re_routing_triggered_;
 
-  // Whether the sim control is enabled.
+  // Whether the sim control is enabled / initialized.
   bool enabled_;
+  bool inited_;
 
   // The header of the routing planning is following.
   apollo::common::Header current_routing_header_;
@@ -132,11 +143,15 @@ class SimControl {
   apollo::common::TrajectoryPoint prev_point_;
   apollo::common::TrajectoryPoint next_point_;
 
+  common::PathPoint adc_position_;
+
   // Initial velocity and acceleration of the main vehicle
   double start_velocity_ = 0.0;
   double start_acceleration_ = 0.0;
 
   static constexpr int kPlanningCountToStart = 5;
+
+  relative_map::NavigationInfo navigation_info_;
 
   FRIEND_TEST(SimControlTest, Test);
 };

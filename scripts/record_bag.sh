@@ -22,48 +22,26 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 source "${DIR}/apollo_base.sh"
 
 function start() {
-  BAG_DIR="${APOLLO_ROOT_DIR}/data/bag"
-
-  # Record bag to the largest portable-disk.
-  if [ "$1" = "--portable-disk" ]; then
-    LARGEST_DISK="$(df | grep "/media/${DOCKER_USER}" | sort -nr -k 4 | \
-        awk '{print substr($0, index($0, $6))}')"
-    if [ ! -z "${LARGEST_DISK}" ]; then
-      REAL_BAG_DIR="${LARGEST_DISK}/data/bag"
-      if [ ! -d "${REAL_BAG_DIR}" ]; then
-        mkdir -p "${REAL_BAG_DIR}"
-      fi
-      BAG_DIR="${APOLLO_ROOT_DIR}/data/bag/portable"
-      rm -fr "${BAG_DIR}"
-      ln -s "${REAL_BAG_DIR}" "${BAG_DIR}"
-    else
-      echo "Cannot find portable disk."
-      echo "Please make sure your container was started AFTER inserting the disk."
-    fi
-  fi
-
-  # Create and enter into bag dir.
-  if [ ! -e "${BAG_DIR}" ]; then
-    mkdir -p "${BAG_DIR}"
-  fi
-  cd "${BAG_DIR}"
-  echo "Recording bag to: $(pwd)"
+  decide_task_dir $@
+  cd "${TASK_DIR}"
 
   # Start recording.
   LOG="/tmp/apollo_record.out"
   NUM_PROCESSES="$(pgrep -c -f "rosbag record")"
   if [ "${NUM_PROCESSES}" -eq 0 ]; then
     nohup rosbag record --split --duration=1m -b 2048  \
-        /apollo/sensor/camera/traffic/image_short \
-        /apollo/sensor/camera/traffic/image_long \
         /apollo/sensor/conti_radar \
         /apollo/sensor/delphi_esr \
-        /apollo/sensor/gnss/gnss_status \
-        /apollo/sensor/gnss/odometry \
-        /apollo/sensor/gnss/ins_stat \
+        /apollo/sensor/gnss/best_pose \
         /apollo/sensor/gnss/corrected_imu \
+        /apollo/sensor/gnss/gnss_status \
+        /apollo/sensor/gnss/imu \
+        /apollo/sensor/gnss/ins_stat \
+        /apollo/sensor/gnss/odometry \
+        /apollo/sensor/gnss/raw_data \
+        /apollo/sensor/gnss/rtk_eph \
+        /apollo/sensor/gnss/rtk_obs \
         /apollo/sensor/mobileye \
-        /apollo/sensor/velodyne64/compensator/PointCloud2 \
         /apollo/canbus/chassis \
         /apollo/canbus/chassis_detail \
         /apollo/control \
@@ -75,15 +53,22 @@ function start() {
         /apollo/routing_request \
         /apollo/routing_response \
         /apollo/localization/pose \
+        /apollo/localization/msf_gnss \
+        /apollo/localization/msf_lidar \
+        /apollo/localization/msf_status \
+        /apollo/navigation \
+        /apollo/relative_map \
         /apollo/drive_event \
         /tf \
         /tf_static \
-        /apollo/monitor </dev/null >"${LOG}" 2>&1 &
+        /apollo/monitor \
+        /apollo/monitor/system_status \
+        /apollo/monitor/static_info </dev/null >"${LOG}" 2>&1 &
     fi
 }
 
 function stop() {
-  pkill -SIGINT -f rosbag
+  pkill -SIGINT -f record
 }
 
 function help() {

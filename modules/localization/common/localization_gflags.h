@@ -56,6 +56,7 @@ DECLARE_string(lidar_extrinsics_file);
 DECLARE_string(lidar_height_file);
 DECLARE_double(lidar_height_default);
 DECLARE_int32(lidar_localization_mode);
+DECLARE_int32(lidar_yaw_align_mode);
 DECLARE_int32(lidar_filter_size);
 DECLARE_int32(lidar_thread_num);
 DECLARE_double(lidar_imu_max_delay_time);
@@ -66,7 +67,10 @@ DECLARE_int32(point_cloud_step);
 // integ module
 DECLARE_bool(integ_ins_can_self_align);
 DECLARE_bool(integ_sins_align_with_vel);
-DECLARE_bool(using_raw_gnsspos);
+DECLARE_bool(integ_sins_state_check);
+DECLARE_double(integ_sins_state_span_time);
+DECLARE_double(integ_sins_state_pos_std);
+
 DECLARE_double(vel_threshold_get_yaw);
 DECLARE_bool(integ_debug_log_flag);
 
@@ -86,14 +90,25 @@ DECLARE_double(imu_to_ant_offset_uz);
 
 // common
 DECLARE_double(imu_rate);
-DECLARE_int32(local_utm_zone_id);
+DECLARE_bool(if_utm_zone_id_from_folder);
 DECLARE_bool(trans_gpstime_to_utctime);
 DECLARE_int32(gnss_mode);
 DECLARE_bool(imu_coord_rfu);
 DECLARE_bool(gnss_only_init);
 DECLARE_bool(enable_lidar_localization);
 
+// imu vehicle extrinsic
+DECLARE_string(vehicle_imu_file);
+DECLARE_bool(if_vehicle_imu_from_file);
+DECLARE_double(imu_vehicle_qx);
+DECLARE_double(imu_vehicle_qy);
+DECLARE_double(imu_vehicle_qz);
+DECLARE_double(imu_vehicle_qw);
+
 // Debug
 DECLARE_bool(use_visualize);
+
+// visualization
+DECLARE_string(map_visual_dir);
 
 #endif  // MODULES_LOCALIZATION_COMMON_LOCALIZATION_GFLAGS_H_

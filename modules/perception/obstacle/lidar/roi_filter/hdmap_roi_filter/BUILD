@@ -19,13 +19,13 @@ cc_library(
     deps = [
         "//external:gflags",
         "//modules/common",
+        "//modules/perception/common:pcl_util",
         "//modules/perception/lib/config_manager",
-        "//modules/perception/lib/pcl_util",
-        "//modules/perception/obstacle/base:perception_obstacle_base",
-        "//modules/perception/obstacle/lidar/interface:perception_obstacle_lidar_interface",
-        "//modules/perception/obstacle/onboard:perception_obstacle_hdmapinput",
-        "@eigen//:eigen",
-        "@pcl//:pcl",
+        "//modules/perception/obstacle/base",
+        "//modules/perception/obstacle/lidar/interface",
+        "//modules/perception/obstacle/onboard:hdmapinput",
+        "@eigen",
+        "@pcl",
     ],
 )
 
@@ -41,9 +41,9 @@ cc_test(
     deps = [
         "//external:gflags",
         "//modules/common:log",
-        "//modules/perception/lib/pcl_util",
+        "//modules/perception/common:pcl_util",
         "//modules/perception/obstacle/lidar/roi_filter/hdmap_roi_filter",
-        "@gtest//:gtest",
+        "@gtest",
         "@gtest//:main",
     ],
 )

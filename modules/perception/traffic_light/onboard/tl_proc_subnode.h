@@ -35,7 +35,7 @@ namespace apollo {
 namespace perception {
 namespace traffic_light {
 
-class ImageLights;
+struct ImageLights;
 class TLPreprocessingData;
 class TLProcData;
 
@@ -77,7 +77,6 @@ class TLProcSubnode : public Subnode {
   std::unique_ptr<BaseRectifier> rectifier_ = nullptr;
   std::unique_ptr<BaseRecognizer> recognizer_ = nullptr;
   std::unique_ptr<BaseReviser> reviser_ = nullptr;
-  uint32_t seq_num_ = 0;
   Mutex mutex_;
   DISALLOW_COPY_AND_ASSIGN(TLProcSubnode);
 };

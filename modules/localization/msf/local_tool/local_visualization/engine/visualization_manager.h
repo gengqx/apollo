@@ -28,6 +28,7 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include <atomic>
 #include "modules/localization/msf/local_tool/local_visualization/engine/visualization_engine.h"
 
 namespace apollo {
@@ -54,9 +55,9 @@ struct LocalizationMsg {
   double qz;
   double qw;
 
-  double std_x;
-  double std_y;
-  double std_z;
+  double std_x = 0;
+  double std_y = 0;
+  double std_z = 0;
 
   LocalizationMsg interpolate(const double scale,
                               const LocalizationMsg &loc_msg) {
@@ -124,7 +125,7 @@ class IntepolationMessageBuffer : public MessageBuffer<MessageType> {
   ~IntepolationMessageBuffer();
 
   bool QueryMessage(const double timestamp, MessageType *msg,
-                    double timeout_s = 0.05);
+                    double timeout_s = 0.01);
 
  private:
   bool WaitMessageBufferOk(const double timestamp,
@@ -135,7 +136,9 @@ class IntepolationMessageBuffer : public MessageBuffer<MessageType> {
 
 struct VisualizationManagerParams {
   std::string map_folder;
-  std::string lidar_extrinsic_file;
+  std::string map_visual_folder;
+  Eigen::Affine3d velodyne_extrinsic;
+  VisualMapParam map_param;
   unsigned int lidar_frame_buffer_capacity;
   unsigned int gnss_loc_info_buffer_capacity;
   unsigned int lidar_loc_info_buffer_capacity;
@@ -155,7 +158,9 @@ class VisualizationManager {
   }
 
   bool Init(const std::string &map_folder,
-            const std::string lidar_extrinsic_file);
+            const std::string &map_visual_folder,
+            const Eigen::Affine3d &velodyne_extrinsic,
+            const VisualMapParam &map_param);
   bool Init(const VisualizationManagerParams &params);
 
   void AddLidarFrame(const LidarVisFrame &lidar_frame);
@@ -174,7 +179,7 @@ class VisualizationManager {
   VisualizationEngine visual_engine_;
   // Visualization Thread
   std::thread visual_thread_;
-  bool stop_visualization_;
+  std::atomic<bool> stop_visualization_;
 
   MessageBuffer<LidarVisFrame> lidar_frame_buffer_;
   IntepolationMessageBuffer<LocalizationMsg> gnss_loc_info_buffer_;

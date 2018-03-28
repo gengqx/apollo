@@ -34,15 +34,20 @@ namespace control {
 using apollo::canbus::Chassis;
 using apollo::common::ErrorCode;
 using apollo::common::Status;
+using apollo::common::VehicleStateProvider;
 using apollo::common::adapter::AdapterManager;
 using apollo::common::monitor::MonitorMessageItem;
 using apollo::common::time::Clock;
 using apollo::localization::LocalizationEstimate;
 using apollo::planning::ADCTrajectory;
 
-std::string Control::Name() const { return FLAGS_control_node_name; }
+std::string Control::Name() const {
+  return FLAGS_control_node_name;
+}
 
 Status Control::Init() {
+  init_time_ = Clock::NowInSeconds();
+
   AINFO << "Control init, starting ...";
   CHECK(common::util::GetProtoFromFile(FLAGS_control_conf_file, &control_conf_))
       << "Unable to load control conf file: " + FLAGS_control_conf_file;
@@ -51,7 +56,7 @@ Status Control::Init() {
 
   AdapterManager::Init(FLAGS_control_adapter_config_filename);
 
-  common::monitor::MonitorBuffer buffer(&monitor_);
+  common::monitor::MonitorLogBuffer buffer(&monitor_logger_);
 
   // set controller
   if (!controller_agent_.Init(&control_conf_).ok()) {
@@ -71,6 +76,8 @@ Status Control::Init() {
 
   CHECK(AdapterManager::GetPad()) << "Pad is not initialized.";
 
+  CHECK(AdapterManager::GetMonitor()) << "Monitor is not initialized.";
+
   CHECK(AdapterManager::GetControlCommand())
       << "ControlCommand publisher is not initialized.";
 
@@ -85,7 +92,7 @@ Status Control::Start() {
   // need to sleep, because advertised channel is not ready immediately
   // simple test shows a short delay of 80 ms or so
   AINFO << "Control resetting vehicle state, sleeping for 1000 ms ...";
-  usleep(1000 * 1000);
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
   // should init_vehicle first, let car enter work status, then use status msg
   // trigger control
@@ -99,7 +106,7 @@ Status Control::Start() {
 
   AINFO << "Control init done!";
 
-  common::monitor::MonitorBuffer buffer(&monitor_);
+  common::monitor::MonitorLogBuffer buffer(&monitor_logger_);
   buffer.INFO("control started");
 
   return Status::OK();
@@ -131,16 +138,31 @@ void Control::OnMonitor(
 Status Control::ProduceControlCommand(ControlCommand *control_command) {
   Status status = CheckInput();
   // check data
+
   if (!status.ok()) {
     AERROR_EVERY(100) << "Control input data failed: "
                       << status.error_message();
+    control_command->mutable_engage_advice()->set_advice(
+        apollo::common::EngageAdvice::DISALLOW_ENGAGE);
+    control_command->mutable_engage_advice()->set_reason(
+        status.error_message());
     estop_ = true;
   } else {
     Status status_ts = CheckTimestamp();
     if (!status_ts.ok()) {
       AERROR << "Input messages timeout";
-      estop_ = true;
+      // estop_ = true;
       status = status_ts;
+      if (chassis_.driving_mode() !=
+          apollo::canbus::Chassis::COMPLETE_AUTO_DRIVE) {
+        control_command->mutable_engage_advice()->set_advice(
+            apollo::common::EngageAdvice::DISALLOW_ENGAGE);
+        control_command->mutable_engage_advice()->set_reason(
+            status.error_message());
+      }
+    } else {
+      control_command->mutable_engage_advice()->set_advice(
+          apollo::common::EngageAdvice::READY_TO_ENGAGE);
     }
   }
 
@@ -193,6 +215,12 @@ Status Control::ProduceControlCommand(ControlCommand *control_command) {
 void Control::OnTimer(const ros::TimerEvent &) {
   double start_timestamp = Clock::NowInSeconds();
 
+  if (FLAGS_is_control_test_mode && FLAGS_control_test_duration > 0 &&
+      (start_timestamp - init_time_) > FLAGS_control_test_duration) {
+    AERROR << "Control finished testing. exit";
+    ros::shutdown();
+  }
+
   ControlCommand control_command;
 
   Status status = ProduceControlCommand(&control_command);
@@ -208,6 +236,8 @@ void Control::OnTimer(const ros::TimerEvent &) {
 
   const double time_diff_ms = (end_timestamp - start_timestamp) * 1000;
   control_command.mutable_latency_stats()->set_total_time_ms(time_diff_ms);
+  control_command.mutable_latency_stats()->set_total_time_exceeded(
+      time_diff_ms < control_conf_.control_period());
   ADEBUG << "control cycle time is: " << time_diff_ms << " ms.";
   status.Save(control_command.mutable_header()->mutable_status());
 
@@ -252,13 +282,7 @@ Status Control::CheckInput() {
     }
   }
 
-  // Add tempprary flag for test
-  if (FLAGS_use_relative_position) {
-    localization_.mutable_pose()->mutable_position()->set_x(0.0);
-    localization_.mutable_pose()->mutable_position()->set_y(0.0);
-    localization_.mutable_pose()->set_heading(0.0);
-  }
-  common::VehicleStateProvider::instance()->Update(localization_, chassis_);
+  VehicleStateProvider::instance()->Update(localization_, chassis_);
 
   return Status::OK();
 }
@@ -275,7 +299,7 @@ Status Control::CheckTimestamp() {
       (FLAGS_max_localization_miss_num * control_conf_.localization_period())) {
     AERROR << "Localization msg lost for " << std::setprecision(6)
            << localization_diff << "s";
-    common::monitor::MonitorBuffer buffer(&monitor_);
+    common::monitor::MonitorLogBuffer buffer(&monitor_logger_);
     buffer.ERROR("Localization msg lost");
     return Status(ErrorCode::CONTROL_COMPUTE_ERROR, "Localization msg timeout");
   }
@@ -285,7 +309,7 @@ Status Control::CheckTimestamp() {
       (FLAGS_max_chassis_miss_num * control_conf_.chassis_period())) {
     AERROR << "Chassis msg lost for " << std::setprecision(6) << chassis_diff
            << "s";
-    common::monitor::MonitorBuffer buffer(&monitor_);
+    common::monitor::MonitorLogBuffer buffer(&monitor_logger_);
     buffer.ERROR("Chassis msg lost");
     return Status(ErrorCode::CONTROL_COMPUTE_ERROR, "Chassis msg timeout");
   }
@@ -296,7 +320,7 @@ Status Control::CheckTimestamp() {
       (FLAGS_max_planning_miss_num * control_conf_.trajectory_period())) {
     AERROR << "Trajectory msg lost for " << std::setprecision(6)
            << trajectory_diff << "s";
-    common::monitor::MonitorBuffer buffer(&monitor_);
+    common::monitor::MonitorLogBuffer buffer(&monitor_logger_);
     buffer.ERROR("Trajectory msg lost");
     return Status(ErrorCode::CONTROL_COMPUTE_ERROR, "Trajectory msg timeout");
   }

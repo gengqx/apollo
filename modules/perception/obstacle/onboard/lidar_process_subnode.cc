@@ -16,22 +16,18 @@
 
 #include "modules/perception/obstacle/onboard/lidar_process_subnode.h"
 
-#include <map>
-#include <string>
+#include <unordered_map>
 
-#include "Eigen/Core"
 #include "eigen_conversions/eigen_msg.h"
 #include "pcl_conversions/pcl_conversions.h"
 #include "ros/include/ros/ros.h"
-#include "sensor_msgs/PointCloud2.h"
 
-#include "modules/common/adapters/adapter_manager.h"
 #include "modules/common/log.h"
+#include "modules/common/time/time_util.h"
+#include "modules/common/time/timer.h"
 #include "modules/perception/common/perception_gflags.h"
-#include "modules/perception/lib/base/time_util.h"
-#include "modules/perception/lib/base/timer.h"
+#include "modules/perception/common/sequence_type_fuser/sequence_type_fuser.h"
 #include "modules/perception/lib/config_manager/config_manager.h"
-#include "modules/perception/obstacle/base/object.h"
 #include "modules/perception/obstacle/lidar/dummy/dummy_algorithms.h"
 #include "modules/perception/obstacle/lidar/object_builder/min_box/min_box.h"
 #include "modules/perception/obstacle/lidar/roi_filter/hdmap_roi_filter/hdmap_roi_filter.h"
@@ -44,16 +40,14 @@ namespace apollo {
 namespace perception {
 
 using apollo::common::adapter::AdapterManager;
+using Eigen::Affine3d;
+using Eigen::Matrix4d;
 using pcl_util::Point;
-using pcl_util::PointD;
 using pcl_util::PointCloud;
 using pcl_util::PointCloudPtr;
+using pcl_util::PointD;
 using pcl_util::PointIndices;
 using pcl_util::PointIndicesPtr;
-using Eigen::Matrix4d;
-using Eigen::Affine3d;
-using std::string;
-using std::map;
 
 bool LidarProcessSubnode::InitInternal() {
   if (inited_) {
@@ -72,7 +66,7 @@ bool LidarProcessSubnode::InitInternal() {
     return false;
   }
   // parse reserve fileds
-  map<string, string> reserve_field_map;
+  std::unordered_map<std::string, std::string> reserve_field_map;
   if (!SubnodeHelper::ParseReserveField(reserve_, &reserve_field_map)) {
     AERROR << "Failed to parse reserve filed: " << reserve_;
     return false;
@@ -106,7 +100,7 @@ void LidarProcessSubnode::OnPointCloud(
 
   std::shared_ptr<SensorObjects> out_sensor_objects(new SensorObjects);
   out_sensor_objects->timestamp = timestamp_;
-  out_sensor_objects->sensor_type = VELODYNE_64;
+  out_sensor_objects->sensor_type = SensorType::VELODYNE_64;
   out_sensor_objects->sensor_id = device_id_;
   out_sensor_objects->seq_num = seq_num_;
 
@@ -214,10 +208,23 @@ void LidarProcessSubnode::OnPointCloud(
       return;
     }
   }
-
+  ADEBUG << "call tracker succ, there are "
+         << out_sensor_objects->objects.size() << " tracked objects.";
   PERF_BLOCK_END("lidar_tracker");
-  ADEBUG << "lidar process succ, there are "
-         << (out_sensor_objects->objects).size() << " tracked objects.";
+
+  /// call type fuser
+  if (type_fuser_ != nullptr) {
+    TypeFuserOptions type_fuser_options;
+    type_fuser_options.timestamp = timestamp_;
+    if (!type_fuser_->FuseType(type_fuser_options,
+                               &(out_sensor_objects->objects))) {
+      out_sensor_objects->error_code = common::PERCEPTION_ERROR_PROCESS;
+      PublishDataAndEvent(timestamp_, out_sensor_objects);
+      return;
+    }
+  }
+  ADEBUG << "lidar process succ.";
+  PERF_BLOCK_END("lidar_type_fuser");
 
   PublishDataAndEvent(timestamp_, out_sensor_objects);
   return;
@@ -228,18 +235,20 @@ void LidarProcessSubnode::RegistAllAlgorithm() {
   RegisterFactoryDummySegmentation();
   RegisterFactoryDummyObjectBuilder();
   RegisterFactoryDummyTracker();
+  RegisterFactoryDummyTypeFuser();
 
   RegisterFactoryHdmapROIFilter();
   RegisterFactoryCNNSegmentation();
   RegisterFactoryMinBoxObjectBuilder();
   RegisterFactoryHmObjectTracker();
+  RegisterFactorySequenceTypeFuser();
 }
 
 bool LidarProcessSubnode::InitFrameDependence() {
   /// init share data
   CHECK(shared_data_manager_ != nullptr);
   // init preprocess_data
-  const string lidar_processing_data_name("LidarObjectData");
+  const std::string lidar_processing_data_name("LidarObjectData");
   processing_data_ = dynamic_cast<LidarObjectData*>(
       shared_data_manager_->GetSharedData(lidar_processing_data_name));
   if (processing_data_ == nullptr) {
@@ -322,6 +331,20 @@ bool LidarProcessSubnode::InitAlgorithmPlugin() {
   }
   AINFO << "Init algorithm plugin successfully, tracker: " << tracker_->name();
 
+  /// init type fuser
+  type_fuser_.reset(
+      BaseTypeFuserRegisterer::GetInstanceByName(FLAGS_onboard_type_fuser));
+  if (!type_fuser_) {
+    AERROR << "Failed to get instance: " << FLAGS_onboard_type_fuser;
+    return false;
+  }
+  if (!type_fuser_->Init()) {
+    AERROR << "Failed to Init type_fuser: " << type_fuser_->name();
+    return false;
+  }
+  AINFO << "Init algorithm plugin successfully, type_fuser: "
+        << type_fuser_->name();
+
   return true;
 }
 
@@ -342,12 +365,13 @@ void LidarProcessSubnode::TransPointCloudToPCL(
   size_t points_num = 0;
   for (size_t idx = 0; idx < in_cloud.size(); ++idx) {
     pcl_util::PointXYZIT& pt = in_cloud.points[idx];
-    if (!isnan(pt.x) && !isnan(pt.y) && !isnan(pt.z) && !isnan(pt.intensity)) {
+    if (!std::isnan(pt.x) && !std::isnan(pt.y) && !std::isnan(pt.z) &&
+        !std::isnan(pt.intensity)) {
       cloud->points[points_num].x = pt.x;
       cloud->points[points_num].y = pt.y;
       cloud->points[points_num].z = pt.z;
       cloud->points[points_num].intensity = pt.intensity;
-      points_num++;
+      ++points_num;
     }
   }
   cloud->points.resize(points_num);

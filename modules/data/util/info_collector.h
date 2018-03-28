@@ -17,9 +17,10 @@
 #ifndef MODULES_DATA_UTIL_INFO_COLLECTOR_H_
 #define MODULES_DATA_UTIL_INFO_COLLECTOR_H_
 
+#include <string>
+
 #include "modules/common/macro.h"
-#include "modules/data/proto/recorder_conf.pb.h"
-#include "modules/data/proto/task.pb.h"
+#include "modules/data/proto/static_info.pb.h"
 
 /**
  * @namespace apollo::data
@@ -31,7 +32,7 @@ namespace data {
 class InfoCollector {
  public:
   // Get task information.
-  static const Task &GetTaskInfo();
+  static const StaticInfo &GetStaticInfo();
 
   // Get specific information.
   // Listening topics: ChassisDetail.
@@ -41,13 +42,12 @@ class InfoCollector {
   static const SoftwareInfo &GetSoftwareInfo();
   static const UserInfo &GetUserInfo();
 
-  // Load and save the task information template.
-  static Task LoadTaskInfoTemplate();
-  static bool SaveTaskInfoTemplate(const Task &task_info);
+  // Utils.
+  static std::string GetDockerImage();
 
  private:
-  Task task_info_;
-  RecorderConf config_;
+  StaticInfo static_info_;
+  StaticInfoConf config_;
 
   DECLARE_SINGLETON(InfoCollector);
 };

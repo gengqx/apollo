@@ -16,9 +16,6 @@
 
 #include "modules/perception/obstacle/fusion/probabilistic_fusion/pbf_sensor_manager.h"
 
-#include <map>
-#include <string>
-#include <vector>
 #include "modules/common/log.h"
 
 namespace apollo {
@@ -45,16 +42,26 @@ PbfSensorManager::~PbfSensorManager() {
 bool PbfSensorManager::Init() {
   sensors_.clear();
 
-  std::string sensor_id = GetSensorType(VELODYNE_64);
-  SensorType type = VELODYNE_64;
+  std::string sensor_id = GetSensorType(SensorType::VELODYNE_64);
+  SensorType type = SensorType::VELODYNE_64;
 
   PbfSensor *velodyne_64 = new PbfSensor(type, sensor_id);
   sensors_[sensor_id] = velodyne_64;
 
-  sensor_id = GetSensorType(RADAR);
-  type = RADAR;
+  sensor_id = GetSensorType(SensorType::RADAR);
+  type = SensorType::RADAR;
   PbfSensor *radar = new PbfSensor(type, sensor_id);
-  sensors_[sensor_id] = radar;
+  if (radar == nullptr) {
+    AERROR << "Fail to create PbfSensor. sensor_id = " << sensor_id;
+    return false;
+  }
+  if (sensors_.find(sensor_id) == sensors_.end()) {
+    sensors_[sensor_id] = radar;
+  } else {
+    AERROR << "The velodyne 64 and radar sensor ids are conflict.";
+    delete radar;
+    return false;
+  }
   return true;
 }
 
@@ -68,6 +75,10 @@ void PbfSensorManager::AddSensorMeasurements(const SensorObjects &objects) {
     AWARN << "Cannot find sensor " << sensor_id
           << " and create one in SensorManager";
     sensor = new PbfSensor(type, sensor_id);
+    if (sensor == nullptr) {
+      AERROR << "Fail to create PbfSensor. sensor_id = " << sensor_id;
+      return;
+    }
     sensors_[sensor_id] = sensor;
   } else {
     sensor = it->second;

@@ -29,12 +29,8 @@ using apollo::common::util::Print;
 using apollo::common::util::StrCat;
 
 Object::Object() {
-  direction = Vector3d(1, 0, 0);
-  center = Vector3d::Zero();
-  velocity = Vector3d::Zero();
   cloud.reset(new pcl_util::PointCloud);
-  type = UNKNOWN;
-  type_probs.resize(MAX_OBJECT_TYPE, 0);
+  type_probs.resize(static_cast<int>(ObjectType::MAX_OBJECT_TYPE), 0);
   position_uncertainty << 0.01, 0, 0, 0, 0.01, 0, 0, 0, 0.01;
   velocity_uncertainty << 0.01, 0, 0, 0, 0.01, 0, 0, 0, 0.01;
 }
@@ -44,8 +40,12 @@ void Object::clone(const Object& rhs) {
   pcl::copyPointCloud<pcl_util::Point, pcl_util::Point>(*(rhs.cloud), *cloud);
   radar_supplement = nullptr;
   if (rhs.radar_supplement != nullptr) {
-    radar_supplement.reset(new RadarSupplement());
-    radar_supplement->clone(*(rhs.radar_supplement));
+    radar_supplement.reset(new RadarSupplement(*rhs.radar_supplement));
+  }
+  camera_supplement = nullptr;
+  if (rhs.camera_supplement != nullptr) {
+    camera_supplement.reset(new CameraSupplement());
+    camera_supplement->clone(*(rhs.camera_supplement));
   }
 }
 
@@ -77,14 +77,14 @@ std::string Object::ToString() const {
                        polygon.size(),
                        ", "
                        "type: ",
-                       type,
+                       static_cast<int>(type),
                        ", "
                        "is_background: ",
                        is_background, "]"));
 }
 
 void Object::Serialize(PerceptionObstacle* pb_obj) const {
-  CHECK(pb_obj != NULL);
+  CHECK(pb_obj != nullptr);
   pb_obj->set_id(track_id);
   pb_obj->set_theta(theta);
 
@@ -118,6 +118,8 @@ void Object::Serialize(PerceptionObstacle* pb_obj) const {
   }
 
   pb_obj->set_confidence(score);
+  pb_obj->set_confidence_type(
+      static_cast<PerceptionObstacle::ConfidenceType>(score_type));
   pb_obj->set_tracking_time(tracking_time);
   pb_obj->set_type(static_cast<PerceptionObstacle::Type>(type));
   pb_obj->set_timestamp(latest_tracked_time);  // in seconds.
@@ -150,6 +152,7 @@ void Object::Deserialize(const PerceptionObstacle& pb_obs) {
   }
 
   score = pb_obs.confidence();
+  score_type = static_cast<ScoreType>(pb_obs.confidence_type());
   tracking_time = pb_obs.tracking_time();
   latest_tracked_time = pb_obs.timestamp();
   type = static_cast<ObjectType>(pb_obs.type());

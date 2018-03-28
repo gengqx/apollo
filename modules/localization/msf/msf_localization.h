@@ -19,17 +19,20 @@
  * @brief The class of MSFLocalization
  */
 
-#ifndef MODULES_LOCALIZATION_MSF_LOCALIZATION_H_
-#define MODULES_LOCALIZATION_MSF_LOCALIZATION_H_
+#ifndef MODULES_LOCALIZATION_MSF_MSF_LOCALIZATION_H_
+#define MODULES_LOCALIZATION_MSF_MSF_LOCALIZATION_H_
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "gtest/gtest_prod.h"
+
 #include "ros/include/ros/ros.h"
+#include "Eigen/Core"
+#include "Eigen/Geometry"
 #include "sensor_msgs/PointCloud2.h"
-#include "tf2_ros/transform_broadcaster.h"
 
 #include "modules/drivers/gnss/proto/imu.pb.h"
 #include "modules/localization/proto/gps.pb.h"
@@ -40,7 +43,7 @@
 
 #include "include/localization_integ.h"
 #include "modules/common/log.h"
-#include "modules/common/monitor/monitor.h"
+#include "modules/common/monitor_log/monitor_log_buffer.h"
 #include "modules/common/status/status.h"
 #include "modules/localization/localization_base.h"
 
@@ -59,7 +62,6 @@ namespace localization {
 class MSFLocalization : public LocalizationBase {
  public:
   MSFLocalization();
-  virtual ~MSFLocalization();
 
   /**
    * @brief module start function
@@ -82,27 +84,33 @@ class MSFLocalization : public LocalizationBase {
   void OnGnssRtkEph(const GnssEphemeris &gnss_orbit_msg);
   void OnGnssBestPose(const GnssBestPose &bestgnsspos_msg);
 
-  void PublishPoseBroadcastTF(const LocalizationEstimate &localization);
+ private:
+  bool LoadGnssAntennaExtrinsic(const std::string &file_path, double *offset_x,
+                                double *offset_y, double *offset_z,
+                                double *uncertainty_x, double *uncertainty_y,
+                                double *uncertainty_z);
+  bool LoadImuVehicleExtrinsic(const std::string &file_path,
+                                double *quat_qx, double *quat_qy,
+                                double *quat_qz, double *quat_qw);
+  bool LoadZoneIdFromFolder(const std::string &folder_path, int *zone_id);
 
  private:
-  bool load_gnss_antenna_extrinsic(const std::string &file_path,
-                                   double *offset_x, double *offset_y,
-                                   double *offset_z, double *uncertainty_x,
-                                   double *uncertainty_y,
-                                   double *uncertainty_z);
-
- private:
-  apollo::common::monitor::Monitor monitor_;
+  apollo::common::monitor::MonitorLogger monitor_logger_;
   LocalizationInteg localization_integ_;
   LocalizationIntegParam localizaiton_param_;
-  tf2_ros::TransformBroadcaster *tf2_broadcaster_;
   LocalizationMeasureState localization_state_;
   uint64_t pcd_msg_index_;
 
+  MeasureState latest_lidar_localization_status_;
+  MeasureState latest_gnss_localization_status_;
+
   // FRIEND_TEST(MSFLocalizationTest, InitParams);
+
+  // rotation from the vehicle coord to imu coord
+  Eigen::Quaternion<double> imu_vehicle_quat_;
 };
 
 }  // namespace localization
 }  // namespace apollo
 
-#endif  // MODULES_LOCALIZATION_MSF_LOCALIZATION_H_
+#endif  // MODULES_LOCALIZATION_MSF_MSF_LOCALIZATION_H_

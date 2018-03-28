@@ -30,16 +30,16 @@
 #include "modules/common/math/vec2d.h"
 #include "modules/common/util/file.h"
 #include "modules/common/util/util.h"
+#include "modules/planning/common/planning_gflags.h"
 #include "modules/planning/math/curve_math.h"
 
 namespace apollo {
 namespace planning {
 
 QpSplineReferenceLineSmoother::QpSplineReferenceLineSmoother(
-    const QpSplineReferenceLineSmootherConfig& config,
-    Spline2dSolver* const spline_solver)
-    : smoother_config_(config), spline_solver_(spline_solver) {
-  CHECK_NOTNULL(spline_solver);
+    const ReferenceLineSmootherConfig& config)
+    : ReferenceLineSmoother(config) {
+  spline_solver_.reset(new Spline2dSolver(t_knots_, config.spline_order()));
 }
 
 void QpSplineReferenceLineSmoother::Clear() { t_knots_.clear(); }
@@ -54,7 +54,7 @@ bool QpSplineReferenceLineSmoother::Smooth(
     return false;
   }
 
-  spline_solver_->Reset(t_knots_, smoother_config_.spline_order());
+  spline_solver_->Reset(t_knots_, config_.spline_order());
 
   if (!AddConstraint()) {
     AERROR << "Add constraint for spline smoother failed";
@@ -75,27 +75,21 @@ bool QpSplineReferenceLineSmoother::Smooth(
   const double end_t = t_knots_.back();
 
   const double resolution =
-      (end_t - start_t) / (smoother_config_.num_of_total_points() - 1);
+      (end_t - start_t) / (config_.num_of_total_points() - 1);
   double t = start_t;
   std::vector<ReferencePoint> ref_points;
   const auto& spline = spline_solver_->spline();
-  for (std::uint32_t i = 0;
-       i < smoother_config_.num_of_total_points() && t < end_t;
+  for (std::uint32_t i = 0; i < config_.num_of_total_points() && t < end_t;
        ++i, t += resolution) {
-    const double heading = std::atan2(spline.DerivativeY(t),
-                                      spline.DerivativeX(t));
+    const double heading =
+        std::atan2(spline.DerivativeY(t), spline.DerivativeX(t));
     const double kappa = CurveMath::ComputeCurvature(
-        spline.DerivativeX(t),
-        spline.SecondDerivativeX(t),
-        spline.DerivativeY(t),
-        spline.SecondDerivativeY(t));
+        spline.DerivativeX(t), spline.SecondDerivativeX(t),
+        spline.DerivativeY(t), spline.SecondDerivativeY(t));
     const double dkappa = CurveMath::ComputeCurvatureDerivative(
-        spline.DerivativeX(t),
-        spline.SecondDerivativeX(t),
-        spline.ThirdDerivativeX(t),
-        spline.DerivativeY(t),
-        spline.SecondDerivativeY(t),
-        spline.ThirdDerivativeY(t));
+        spline.DerivativeX(t), spline.SecondDerivativeX(t),
+        spline.ThirdDerivativeX(t), spline.DerivativeY(t),
+        spline.SecondDerivativeY(t), spline.ThirdDerivativeY(t));
 
     std::pair<double, double> xy = spline(t);
     xy.first += ref_x_;
@@ -110,10 +104,14 @@ bool QpSplineReferenceLineSmoother::Smooth(
     }
     ref_sl_point.set_s(std::max(ref_sl_point.s(), 0.0));
     ReferencePoint rlp = raw_reference_line.GetReferencePoint(ref_sl_point.s());
+    auto new_lane_waypoints = rlp.lane_waypoints();
+    for (auto& lane_waypoint : new_lane_waypoints) {
+      lane_waypoint.l = ref_sl_point.l();
+    }
     ref_points.emplace_back(ReferencePoint(
         hdmap::MapPathPoint(common::math::Vec2d(xy.first, xy.second), heading,
-                            rlp.lane_waypoints()),
-        kappa, dkappa, 0.0, 0.0));
+                            new_lane_waypoints),
+        kappa, dkappa));
   }
 
   ReferencePoint::RemoveDuplicates(&ref_points);
@@ -128,9 +126,8 @@ bool QpSplineReferenceLineSmoother::Smooth(
 bool QpSplineReferenceLineSmoother::Sampling() {
   const double length = anchor_points_.back().path_point.s() -
                         anchor_points_.front().path_point.s();
-  uint32_t num_spline =
-      std::max(1u, static_cast<uint32_t>(
-                       length / smoother_config_.max_spline_length() + 0.5));
+  uint32_t num_spline = std::max(
+      1u, static_cast<uint32_t>(length / config_.max_spline_length() + 0.5));
   for (std::uint32_t i = 0; i <= num_spline; ++i) {
     t_knots_.push_back(i * 1.0);
   }
@@ -190,16 +187,14 @@ bool QpSplineReferenceLineSmoother::AddKernel() {
   Spline2dKernel* kernel = spline_solver_->mutable_kernel();
 
   // add spline kernel
-  if (smoother_config_.second_derivative_weight() > 0.0) {
-    kernel->AddSecondOrderDerivativeMatrix(
-        smoother_config_.second_derivative_weight());
+  if (config_.second_derivative_weight() > 0.0) {
+    kernel->AddSecondOrderDerivativeMatrix(config_.second_derivative_weight());
   }
-  if (smoother_config_.third_derivative_weight() > 0.0) {
-    kernel->AddThirdOrderDerivativeMatrix(
-        smoother_config_.third_derivative_weight());
+  if (config_.third_derivative_weight() > 0.0) {
+    kernel->AddThirdOrderDerivativeMatrix(config_.third_derivative_weight());
   }
 
-  kernel->AddRegularization(smoother_config_.regularization_weight());
+  kernel->AddRegularization(config_.regularization_weight());
   return true;
 }
 

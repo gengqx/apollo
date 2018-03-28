@@ -61,13 +61,14 @@ Obstacle::Obstacle(const std::string& id,
 
   is_static_ = IsStaticObstacle(perception_obstacle);
   is_virtual_ = IsVirtualObstacle(perception_obstacle);
+  speed_ = std::hypot(perception_obstacle.velocity().x(),
+                      perception_obstacle.velocity().y());
 }
 
 Obstacle::Obstacle(const std::string& id,
                    const PerceptionObstacle& perception_obstacle,
                    const prediction::Trajectory& trajectory)
     : Obstacle(id, perception_obstacle) {
-  has_trajectory_ = true;
   trajectory_ = trajectory;
   auto& trajectory_points = *trajectory_.mutable_trajectory_point();
   double cumulative_s = 0.0;
@@ -75,17 +76,34 @@ Obstacle::Obstacle(const std::string& id,
     trajectory_points[0].mutable_path_point()->set_s(0.0);
   }
   for (int i = 1; i < trajectory_points.size(); ++i) {
+    const auto& prev = trajectory_points[i - 1];
+    const auto& cur = trajectory_points[i];
+    if (prev.relative_time() >= cur.relative_time()) {
+      AERROR << "prediction time is not increasing."
+             << "current point: " << cur.ShortDebugString()
+             << "previous point: " << prev.ShortDebugString();
+    }
     cumulative_s +=
-        common::util::DistanceXY(trajectory_points[i - 1].path_point(),
-                                 trajectory_points[i].path_point());
-
+        common::util::DistanceXY(prev.path_point(), cur.path_point());
     trajectory_points[i].mutable_path_point()->set_s(cumulative_s);
   }
+  speed_ = std::hypot(perception_obstacle.velocity().x(),
+                      perception_obstacle.velocity().y());
 }
+
+double Obstacle::Speed() const { return speed_; }
 
 bool Obstacle::IsStatic() const { return is_static_; }
 
 bool Obstacle::IsVirtual() const { return is_virtual_; }
+
+bool Obstacle::HasTrajectory() const {
+  return trajectory_.trajectory_point_size() > 0;
+}
+
+common::TrajectoryPoint* Obstacle::AddTrajectoryPoint() {
+  return trajectory_.add_trajectory_point();
+}
 
 bool Obstacle::IsStaticObstacle(const PerceptionObstacle& perception_obstacle) {
   if (perception_obstacle.type() == PerceptionObstacle::UNKNOWN_UNMOVABLE) {
@@ -213,7 +231,10 @@ std::unique_ptr<Obstacle> Obstacle::CreateStaticVirtualObstacles(
   // create a "virtual" perception_obstacle
   perception::PerceptionObstacle perception_obstacle;
   // simulator needs a valid integer
-  perception_obstacle.set_id(-(std::hash<std::string>{}(id) >> 1));
+  int32_t negative_id = std::hash<std::string>{}(id);
+  // set the first bit to 1 so negative_id became negative number
+  negative_id |= (0x1 << 31);
+  perception_obstacle.set_id(negative_id);
   perception_obstacle.mutable_position()->set_x(obstacle_box.center().x());
   perception_obstacle.mutable_position()->set_y(obstacle_box.center().y());
   perception_obstacle.set_theta(obstacle_box.heading());
@@ -233,7 +254,9 @@ std::unique_ptr<Obstacle> Obstacle::CreateStaticVirtualObstacles(
     point->set_x(corner_point.x());
     point->set_y(corner_point.y());
   }
-  return std::unique_ptr<Obstacle>(new Obstacle(id, perception_obstacle));
+  auto* obstacle = new Obstacle(id, perception_obstacle);
+  obstacle->is_virtual_ = true;
+  return std::unique_ptr<Obstacle>(obstacle);
 }
 
 }  // namespace planning

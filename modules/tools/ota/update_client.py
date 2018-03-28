@@ -17,33 +17,21 @@
 ###############################################################################
 
 import requests
-import os.path
 import os
+import sys
+import urllib3
 from ConfigParser import ConfigParser
-from modules.data.proto.task_pb2 import VehicleInfo
+from modules.data.proto.static_info_pb2 import VehicleInfo
 import common.proto_utils as proto_utils
 
-
 def update():
-    UPDATE_FILE = os.path.join(os.path.dirname(__file__), 'update.ini')
-    if not os.path.exists(UPDATE_FILE):
-        print "No update found!"
-        exit()
-        
-    config = ConfigParser()
-    config.read(UPDATE_FILE)
-    update_tag = config.get('Update', 'tag')
-    usr_name = os.environ['DOCKER_USER']
-    cmd = 'ssh ' + usr_name + '@localhost' + ' docker pull ' + update_tag
-    code = os.system(cmd)
-    if code != 0:
-        print "Update fail!"
-        exit()
-
     # setup server url
+    config = ConfigParser()
+    CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.ini')
+    config.read(CONFIG_FILE)
     ip = config.get('Host', 'ip')
     port = config.get('Host', 'port')
-    url = 'http://' + ip + ':' + port + '/update'
+    url = 'https://' + ip + ':' + port + '/update'
     
     # setup car info
     vehicle_info = VehicleInfo()
@@ -59,19 +47,21 @@ def update():
     vin = vehicle_info.license.vin
     car_info = {
         "car_type" : brand + "." + model,
-        "tag" : update_tag,
+        "tag" : sys.argv[1],
         "vin" : vin,
     }
 
-    r = requests.post(url, data=car_info)
+    urllib3.disable_warnings()
+    CERT_FILE = os.path.join(os.path.dirname(__file__), 'ota.cert')
+    r = requests.post(url, json=car_info, verify=CERT_FILE)
     if r.status_code == 200:
-        cmd = 'rm ' + UPDATE_FILE
-        os.system(cmd)
         print "Update successfully."
+        sys.exit(0)
     elif r.status_code == 400:
         print "Invalid Request."
     else:
         print "Cannot connect to server."
+    sys.exit(1)
 
 if __name__ == "__main__":
     update()

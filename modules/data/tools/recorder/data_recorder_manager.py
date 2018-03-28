@@ -161,8 +161,8 @@ class DataRecorderManager(object):
         self.update_link()
         logging.info("Create task_id %s successfully", self.output_directory)
         for k, v in self.conf_reader.task_data_args.iteritems():
-            if ['if_record'] and ['record_method'] == "rsync":
-                if ['action_args']['with_remove']:
+            if v['if_record'] and v['record_method'] == "rsync":
+                if v['action_args']['with_remove']:
                     continue
                 self.sync_static_data(k)
         self.if_taskid_isready = True
@@ -455,7 +455,7 @@ def launch_data_recorder(cp):
 def main():
     """main function"""
     usage = ("python modules/data/tools/recorder/data_recorder_manager.py -c "
-             "modules/data/conf/recorder.conf")
+             "modules/data/conf/recorder.debug.yaml")
     parser = optparse.OptionParser(usage)
     parser.add_option("-c", "--conf",
             dest = "conf_file",

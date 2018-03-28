@@ -15,19 +15,28 @@
  *****************************************************************************/
 
 #include "modules/perception/perception.h"
+
+#include "ros/include/ros/ros.h"
+
 #include "modules/common/adapters/adapter_manager.h"
 #include "modules/common/log.h"
 #include "modules/perception/common/perception_gflags.h"
 #include "modules/perception/lib/config_manager/config_manager.h"
 #include "modules/perception/obstacle/base/object.h"
+#include "modules/perception/obstacle/onboard/camera_process_subnode.h"
 #include "modules/perception/obstacle/onboard/fusion_subnode.h"
+#include "modules/perception/obstacle/onboard/async_fusion_subnode.h"
+#include "modules/perception/obstacle/onboard/lane_post_processing_subnode.h"
+#include "modules/perception/obstacle/onboard/lane_shared_data.h"
+#include "modules/perception/obstacle/onboard/motion_service.h"
 #include "modules/perception/obstacle/onboard/lidar_process_subnode.h"
 #include "modules/perception/obstacle/onboard/object_shared_data.h"
+#include "modules/perception/obstacle/onboard/camera_shared_data.h"
+#include "modules/perception/obstacle/onboard/fusion_shared_data.h"
 #include "modules/perception/obstacle/onboard/radar_process_subnode.h"
+#include "modules/perception/obstacle/onboard/visualization_subnode.h"
 #include "modules/perception/traffic_light/onboard/tl_preprocessor_subnode.h"
 #include "modules/perception/traffic_light/onboard/tl_proc_subnode.h"
-#include "ros/include/ros/ros.h"
-#include "sensor_msgs/PointCloud2.h"
 
 namespace apollo {
 namespace perception {
@@ -36,9 +45,7 @@ using apollo::common::adapter::AdapterManager;
 using apollo::common::Status;
 using apollo::common::ErrorCode;
 
-std::string Perception::Name() const {
-  return "perception";
-}
+std::string Perception::Name() const { return "perception"; }
 
 Status Perception::Init() {
   AdapterManager::Init(FLAGS_perception_adapter_config_filename);
@@ -51,7 +58,7 @@ Status Perception::Init() {
     return Status(ErrorCode::PERCEPTION_ERROR, "failed to Init ConfigManager.");
   }
   AINFO << "Init config manager successfully, work_root: "
-        << config_manager->work_root();
+        << config_manager->WorkRoot();
 
   const std::string dag_config_path = apollo::common::util::GetAbsolutePath(
       FLAGS_work_root, FLAGS_dag_config_path);
@@ -70,11 +77,21 @@ void Perception::RegistAllOnboardClass() {
   /// regist sharedata
   RegisterFactoryLidarObjectData();
   RegisterFactoryRadarObjectData();
+  RegisterFactoryCameraObjectData();
+  RegisterFactoryCameraSharedData();
+  RegisterFactoryLaneSharedData();
+  RegisterFactoryFusionSharedData();
   traffic_light::RegisterFactoryTLPreprocessingData();
+
   /// regist subnode
   RegisterFactoryLidarProcessSubnode();
   RegisterFactoryRadarProcessSubnode();
+  RegisterFactoryCameraProcessSubnode();
+  RegisterFactoryLanePostProcessingSubnode();
+  RegisterFactoryAsyncFusionSubnode();
   RegisterFactoryFusionSubnode();
+  RegisterFactoryMotionService();
+  lowcostvisualizer::RegisterFactoryVisualizationSubnode();
   traffic_light::RegisterFactoryTLPreprocessorSubnode();
   traffic_light::RegisterFactoryTLProcSubnode();
 }

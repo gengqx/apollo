@@ -34,9 +34,7 @@ using apollo::common::util::GetAbsolutePath;
 using apollo::common::util::GetContent;
 using google::protobuf::TextFormat;
 
-ConfigManager::ConfigManager() {
-  work_root_ = FLAGS_work_root;
-}
+ConfigManager::ConfigManager() { work_root_ = FLAGS_work_root; }
 
 bool ConfigManager::Init() {
   std::unique_lock<std::mutex> lock(mutex_);
@@ -53,22 +51,13 @@ bool ConfigManager::InitInternal() {
   }
   model_config_map_.clear();
 
-  const std::string path = GetAbsolutePath(work_root_,
-                                           FLAGS_config_manager_path);
+  const std::string path =
+      GetAbsolutePath(work_root_, FLAGS_config_manager_path);
 
   AINFO << "WORK_ROOT: " << work_root_ << " config_manager_path: " << path;
-
-  std::string content;
-  if (!GetContent(path, &content)) {
-    AERROR << "failed to get ConfigManager config path: " << path;
-    return false;
-  }
-
   ModelConfigFileListProto file_list_proto;
-
-  if (!TextFormat::ParseFromString(content, &file_list_proto)) {
-    AERROR << "invalid ModelConfigFileListProto file: "
-           << FLAGS_config_manager_path;
+  if (!apollo::common::util::GetProtoFromASCIIFile(path, &file_list_proto)) {
+    AERROR << "failed to parse ConfigManager config: " << path;
     return false;
   }
 
@@ -94,6 +83,7 @@ bool ConfigManager::InitInternal() {
          multi_model_config_proto.model_configs()) {
       ModelConfig* model_config = new ModelConfig();
       if (!model_config->Reset(model_config_proto)) {
+        delete model_config;
         return false;
       }
 
@@ -122,19 +112,19 @@ bool ConfigManager::Reset() {
   return InitInternal();
 }
 
-bool ConfigManager::GetModelConfig(const std::string& model_name,
-                                   const ModelConfig** model_config) {
+const ModelConfig* ConfigManager::GetModelConfig(
+    const std::string& model_name) {
   if (!inited_ && !Init()) {
-    return false;
+    AERROR << "ConfigManager is not initiated.";
+    return nullptr;
   }
 
   ModelConfigMapConstIterator citer = model_config_map_.find(model_name);
 
   if (citer == model_config_map_.end()) {
-    return false;
+    return nullptr;
   }
-  *model_config = citer->second;
-  return true;
+  return citer->second;
 }
 
 ConfigManager::~ConfigManager() {

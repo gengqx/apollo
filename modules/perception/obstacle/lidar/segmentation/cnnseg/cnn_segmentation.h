@@ -26,8 +26,8 @@
 #include "modules/perception/obstacle/lidar/segmentation/cnnseg/proto/cnnseg.pb.h"
 
 #include "modules/common/log.h"
-#include "modules/perception/lib/base/timer.h"
-#include "modules/perception/lib/pcl_util/pcl_types.h"
+#include "modules/common/time/timer.h"
+#include "modules/perception/common/pcl_types.h"
 #include "modules/perception/obstacle/base/object.h"
 #include "modules/perception/obstacle/lidar/interface/base_segmentation.h"
 #include "modules/perception/obstacle/lidar/segmentation/cnnseg/cluster2d.h"
@@ -48,19 +48,11 @@ class CNNSegmentation : public BaseSegmentation {
                const SegmentationOptions& options,
                std::vector<ObjectPtr>* objects) override;
 
-  std::string name() const override {
-    return "CNNSegmentation";
-  }
+  std::string name() const override { return "CNNSegmentation"; }
 
-  float range() const {
-    return range_;
-  }
-  int width() const {
-    return width_;
-  }
-  int height() const {
-    return height_;
-  }
+  float range() const { return range_; }
+  int width() const { return width_; }
+  int height() const { return height_; }
 
  private:
   bool GetConfigs(std::string* config_file, std::string* proto_file,
@@ -100,7 +92,7 @@ class CNNSegmentation : public BaseSegmentation {
   std::shared_ptr<cnnseg::Cluster2D> cluster2d_;
 
   // timer
-  Timer timer_;
+  common::time::Timer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(CNNSegmentation);
 };

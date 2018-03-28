@@ -15,7 +15,7 @@
  *****************************************************************************/
 
 /**
- * @file visualization_engine.h
+ * @file
  * @brief The engine for localization visualization.
  */
 #ifndef MODULES_LOCALIZATION_MSF_LOCAL_TOOL_VISUALIZATION_ENGINE_H_
@@ -30,8 +30,6 @@
 #include "Eigen/Geometry"
 #include "opencv2/opencv.hpp"
 
-#include "modules/localization/msf/local_map/base_map/base_map_config.h"
-
 namespace apollo {
 namespace localization {
 namespace msf {
@@ -41,19 +39,6 @@ namespace msf {
  * @brief The data structure to store info of a localization
  */
 struct LocalizatonInfo {
-  LocalizatonInfo() {
-    is_valid = false;
-    is_has_attitude = false;
-    is_has_std = false;
-    timestamp = 0.0;
-    frame_id = 0;
-    std_var[0] = 0.01;
-    std_var[1] = 0.01;
-    std_var[1] = 0.01;
-  }
-
-  ~LocalizatonInfo() {}
-
   void set(const Eigen::Translation3d &location,
            const Eigen::Quaterniond &attitude, const Eigen::Vector3d &std_var,
            const std::string &description, const double timestamp,
@@ -94,13 +79,45 @@ struct LocalizatonInfo {
   Eigen::Translation3d location;
   Eigen::Quaterniond attitude;
   Eigen::Affine3d pose;
-  Eigen::Vector3d std_var;
+  Eigen::Vector3d std_var = {0.01, 0.01, 0.01};
   std::string description;
-  double timestamp;
-  unsigned int frame_id;
-  bool is_valid;
-  bool is_has_attitude;
-  bool is_has_std;
+  double timestamp = 0;
+  unsigned int frame_id = 0;
+  bool is_valid = false;
+  bool is_has_attitude = false;
+  bool is_has_std = false;
+};
+
+/**
+ * @struct VisualMapParam
+ * @brief The data structure to store parameters of a map
+ */
+struct VisualMapParam {
+  void set(const std::vector<float> &map_resolutions,
+           const unsigned int map_node_size_x,
+           const unsigned int map_node_size_y, const double map_min_x,
+           const double map_min_y, const double map_max_x,
+           const double map_max_y) {
+    this->map_resolutions = map_resolutions;
+    this->map_node_size_x = map_node_size_x;
+    this->map_node_size_y = map_node_size_y;
+    this->map_min_x = map_min_x;
+    this->map_min_y = map_min_y;
+    this->map_max_x = map_max_x;
+    this->map_max_y = map_max_y;
+  }
+
+  /**@brief The pixel resolutions in the map in meters. */
+  std::vector<float> map_resolutions;
+  /**@brief The map node size in pixels. */
+  unsigned int map_node_size_x = 0;
+  /**@brief The map node size in pixels. */
+  unsigned int map_node_size_y = 0;
+  /**@brief The minimum and maximum UTM range in the map. */
+  double map_min_x = 0;
+  double map_min_y = 0;
+  double map_max_x = 0;
+  double map_max_y = 0;
 };
 
 /**
@@ -108,13 +125,12 @@ struct LocalizatonInfo {
  * @brief The key structure of a map image .
  */
 struct MapImageKey {
-  MapImageKey() : level(0), zone_id(0), node_north_id(0), node_east_id(0) {}
   bool operator<(const MapImageKey &key) const;
 
-  unsigned int level;
-  int zone_id;
-  unsigned int node_north_id;
-  unsigned int node_east_id;
+  unsigned int level = 0;
+  int zone_id = 0;
+  unsigned int node_north_id = 0;
+  unsigned int node_east_id = 0;
 };
 
 /**
@@ -143,21 +159,20 @@ class MapImageCache {
 class VisualizationEngine {
  public:
   VisualizationEngine();
-  ~VisualizationEngine();
+  ~VisualizationEngine() = default;
 
  public:
-  bool Init(const std::string &map_folder, const BaseMapConfig &map_config,
-            const unsigned int resolution_id, const int zone_id,
-            const Eigen::Affine3d &extrinsic,
+  bool Init(const std::string &map_folder, const std::string &map_visual_folder,
+            const VisualMapParam &map_param, const unsigned int resolution_id,
+            const int zone_id, const Eigen::Affine3d &extrinsic,
             const unsigned int loc_info_num = 1);
   void Visualize(const std::vector<LocalizatonInfo> &loc_infos,
                  const std::vector<Eigen::Vector3d> &cloud);
-  // void SetAutoPlay() {
-  //   auto_play_
-  // }
+  void SetAutoPlay(bool auto_play);
 
  private:
-  void Preprocess(const std::string &map_folder);
+  void Preprocess(const std::string &map_folder,
+                  const std::string &map_visual_folder);
   void Draw();
   void DrawLoc(const cv::Point &bias);
   void DrawStd(const cv::Point &bias);
@@ -199,6 +214,7 @@ class VisualizationEngine {
   void SetScale(const double scale);
   void UpdateScale(const double factor);
   bool UpdateCarLocId();
+  bool UpdateCarLocId(const unsigned int car_loc_id);
   bool UpdateTrajectoryGroups();
   void ProcessKey(int key);
 
@@ -225,9 +241,10 @@ class VisualizationEngine {
 
  private:
   std::string map_folder_;
-  BaseMapConfig map_config_;
-  unsigned int zone_id_;
-  unsigned int resolution_id_;
+  std::string map_visual_folder_;
+  VisualMapParam map_param_;
+  unsigned int zone_id_ = 50;
+  unsigned int resolution_id_ = 0;
 
   std::string image_visual_resolution_path_;
   std::string image_visual_leaf_path_;
@@ -236,22 +253,22 @@ class VisualizationEngine {
   cv::Point lt_node_index_;
   cv::Point lt_node_grid_index_;
 
-  std::string window_name_;
+  std::string window_name_ = "Local Visualizer";
   cv::Mat image_window_;
   cv::Mat big_window_;
   cv::Mat subMat_[3][3];
   cv::Mat tips_window_;
 
   Eigen::Vector2d _view_center;
-  double cur_scale_;
-  int cur_stride_;
-  int cur_level_;
-  int max_level_;
-  int max_stride_;
+  double cur_scale_ = 1.0;
+  int cur_stride_ = 1;
+  int cur_level_ = 0;
+  int max_level_ = 0;
+  int max_stride_ = 1;
 
-  bool is_init_;
-  bool follow_car_;
-  bool auto_play_;
+  bool is_init_ = false;
+  bool follow_car_ = true;
+  bool auto_play_ = false;
 
   Eigen::Affine3d car_pose_;
   std::vector<Eigen::Vector3d> cloud_;
@@ -260,14 +277,15 @@ class VisualizationEngine {
   Eigen::Vector2d cloud_img_lt_coord_;
   Eigen::Affine3d velodyne_extrinsic_;
 
-  unsigned int loc_info_num_;
-  unsigned int car_loc_id_;
+  unsigned int loc_info_num_ = 1;
+  unsigned int car_loc_id_ = 0;
+  unsigned int expected_car_loc_id_ = 0;
   std::vector<LocalizatonInfo> cur_loc_infos_;
   std::vector<std::map<double, Eigen::Vector2d>> trajectory_groups_;
 
-  bool is_draw_car_;
-  bool is_draw_trajectory_;
-  bool is_draw_std_;
+  bool is_draw_car_ = true;
+  bool is_draw_trajectory_ = true;
+  bool is_draw_std_ = true;
   std::vector<cv::Mat> car_img_mats_;
 };
 

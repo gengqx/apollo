@@ -1,7 +1,5 @@
-import devConfig from "store/config/dev.yml";
 import STORE from "store";
 import RENDERER from "renderer";
-
 
 export default class OfflinePlaybackWebSocketEndpoint {
     constructor(serverAddr) {
@@ -15,13 +13,16 @@ export default class OfflinePlaybackWebSocketEndpoint {
     }
 
     initialize(params) {
-        if (params && params.url && params.id && params.map) {
-            this.serverUrl = `${location.protocol}//${params.url}`;
+        if (params && params.id && params.map) {
             STORE.playback.setJobId(params.id);
             STORE.playback.setMapId(params.map);
         } else {
             console.error("ERROR: missing required parameter(s)");
             return;
+        }
+
+        if (params.url) {
+            this.serverUrl = `${location.protocol}//${params.url}`;
         }
 
         try {
@@ -95,7 +96,7 @@ export default class OfflinePlaybackWebSocketEndpoint {
                     this.requestTimer = null;
                 }
             }
-        }, msPerFrame);
+        }, msPerFrame/2);
 
         clearInterval(this.processTimer);
         this.processTimer = setInterval(() => {
@@ -128,16 +129,17 @@ export default class OfflinePlaybackWebSocketEndpoint {
     }
 
     processSimWorld(message) {
-        if (STORE.playback.shouldProcessFrame(message.world)) {
+        const world = (typeof message.world) === "string"
+                        ? JSON.parse(message.world): message.world;
+        if (STORE.playback.shouldProcessFrame(world)) {
             STORE.updateTimestamp(message.timestamp);
-            STORE.updateWorldTimestamp(message.world.timestampSec);
             RENDERER.maybeInitializeOffest(
-                message.world.autoDrivingCar.positionX,
-                message.world.autoDrivingCar.positionY);
-            RENDERER.updateWorld(message.world, message.planningData);
-            STORE.meters.update(message.world);
-            STORE.monitor.update(message.world);
-            STORE.trafficSignal.update(message.world);
+                world.autoDrivingCar.positionX,
+                world.autoDrivingCar.positionY);
+            RENDERER.updateWorld(world, message.planningData);
+            STORE.meters.update(world);
+            STORE.monitor.update(world);
+            STORE.trafficSignal.update(world);
         }
     }
     requstFrameCount(jobId) {

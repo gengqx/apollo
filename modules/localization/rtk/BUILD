@@ -13,7 +13,7 @@ cc_library(
     deps = [
         "//modules/common",
         "//modules/common/adapters:adapter_manager",
-        "//modules/common/monitor",
+        "//modules/common/monitor_log",
         "//modules/common/proto:common_proto",
         "//modules/common/status",
         "//modules/common/time",
@@ -21,7 +21,7 @@ cc_library(
         "//modules/localization/common:localization_common",
         "//modules/localization/proto:localization_config_proto",
         "//modules/localization/proto:localization_proto",
-        "@gtest//:gtest",
+        "@gtest",
         "@ros//:ros_common",
     ],
 )

@@ -1,6 +1,6 @@
 #! /bin/bash
 if [ $# -lt 1 ]; then
-    echo "[data path]"
+    echo "Usage: msf_offline_local_visualizer.sh [data path]"
     exit 1;
 fi
 
@@ -9,5 +9,5 @@ cd "${DIR}/.."
 
 source "${DIR}/apollo_base.sh"
 
-$APOLLO_BIN_PREFIX/modules/localization/msf/local_tool/local_visualization/offline_local_visualizer \
+$APOLLO_BIN_PREFIX/modules/localization/msf/local_tool/local_visualization/offline_visual/offline_local_visualizer \
     --basedir $1 \

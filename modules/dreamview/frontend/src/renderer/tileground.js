@@ -24,7 +24,7 @@ export default class TileGround {
         this.currentTiles = {};
         this.initialized = false;
 
-        this.range = PARAMETERS.ground.tileRange;
+        this.range = PARAMETERS.ground.defaults.tileRange;
         this.metadata = null;
         this.mapId = null;
         this.mapUrlPrefix = null;
@@ -37,10 +37,14 @@ export default class TileGround {
             top: metadata.top,
             numCols: metadata.wnum,
             numRows: metadata.hnum,
+            mpp: metadata.mpp,
+            tile: metadata.tile,
+            imageUrl: metadata.image_url,
         };
 
         this.mapId = metadata.mapid;
-        this.mapUrlPrefix = `${serverUrl}/map/getMapPic`;
+        this.mapUrlPrefix = this.metadata.imageUrl
+                ? `${this.metadata.imageUrl}/${this.mapId}` : `${serverUrl}/map/getMapPic`;
         this.initialized = true;
     }
 
@@ -64,7 +68,10 @@ export default class TileGround {
             return;
         }
 
-        const mapUrl = `${this.mapUrlPrefix}?mapId=${this.mapId}&i=${row}&j=${col}`;
+        const mapUrl = this.metadata.imageUrl
+               ? `${this.mapUrlPrefix}/${this.metadata.mpp}_${row}_${col}_${this.metadata.tile}.png`
+               : `${this.mapUrlPrefix}?mapId=${this.mapId}&i=${row}&j=${col}`;
+
         const position = coordinates.applyOffset({
             x: this.metadata.left + (row + 0.5) * this.metadata.tileLength,
             y: this.metadata.top - (col + 0.5) * this.metadata.tileLength,

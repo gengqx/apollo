@@ -23,7 +23,8 @@ DEFINE_string(perception_adapter_config_filename,
 /// lib/config_manager/config_manager.cc
 DEFINE_string(config_manager_path, "./conf/config_manager.config",
               "The ModelConfig config paths file.");
-DEFINE_string(work_root, "modules/perception", "Project work root direcotry.");
+DEFINE_string(work_root, "/apollo/modules/perception/",
+              "perception work root direcotry.");
 
 /// obstacle/base/object.cc
 DEFINE_bool(is_serialize_point_cloud, false,
@@ -40,6 +41,7 @@ DEFINE_string(onboard_segmentor, "DummySegmentation", "onboard segmentation");
 DEFINE_string(onboard_object_builder, "DummyObjectBuilder",
               "onboard object builder");
 DEFINE_string(onboard_tracker, "DummyTracker", "onboard tracker");
+DEFINE_string(onboard_type_fuser, "DummyTypeFuser", "onboard type fuser");
 
 DEFINE_int32(tf2_buff_in_ms, 10, "the tf2 buff size in ms");
 DEFINE_int32(localization_buffer_size, 40, "localization buffer size");
@@ -51,8 +53,10 @@ DEFINE_string(obstacle_module_name, "perception_obstacle",
 DEFINE_bool(enable_visualization, false, "enable visualization for debug");
 
 /// obstacle/perception.cc
+/* dag streaming config for Apollo 2.0 */
 DEFINE_string(dag_config_path, "./conf/dag_streaming.config",
               "Onboard DAG Streaming config.");
+
 
 /// obstacle/onboard/radar_process_subnode.cc
 DEFINE_string(onboard_radar_detector, "DummyRadarDetector",
@@ -69,6 +73,19 @@ DEFINE_string(short_camera_extrinsic_file,
               "modules/perception/data/params/short_camera_extrinsics.yaml",
               "short_camera extrinsic file");
 
+/// obstacle/onboard/camera_process_subnode.cc
+// Ex: /apollo/modules/perception/data/yolo_camera_detector_test/test.jpg
+DEFINE_string(image_file_path, "", "Debug image file");
+DEFINE_bool(image_file_debug, false, "Debug ROS to CV image");
+
+/// modules/perception/lib/config_manager/calibration_config_manager.cc
+DEFINE_string(front_camera_extrinsics_file,
+              "/data/params/front_camera_extrinsics.yaml",
+              "front_camera extrinsic file");
+DEFINE_string(front_camera_intrinsics_file,
+              "/data/params/front_camera_intrinsics.yaml",
+              "front_camera intrinsic file");
+
 /// obstacle/onboard/fusion_subnode.cc
 DEFINE_string(onboard_fusion, "ProbabilisticFusion",
               "fusion name which enabled onboard");
@@ -76,3 +93,47 @@ DEFINE_string(onboard_fusion, "ProbabilisticFusion",
 DEFINE_double(query_signal_range, 100.0, "max distance to front signals");
 DEFINE_bool(output_raw_img, false, "write raw image to disk");
 DEFINE_bool(output_debug_img, false, "write debug image to disk");
+
+/// Temporarily change Kalman motion fusion to config here.
+DEFINE_double(q_matrix_coefficient_amplifier, 0.5,
+              "Kalman fitler matrix Q coeffcients");
+DEFINE_double(r_matrix_amplifier, 1, "Kalman fitler matrix r coeffcients");
+DEFINE_double(p_matrix_amplifier, 1, "Kalman fitler matrix p coeffcients");
+
+DEFINE_double(a_matrix_covariance_coeffcient_1, 0.05,
+              "Kalman fitler matrix a coeffcients, a_matrix_(0, 2)");
+DEFINE_double(a_matrix_covariance_coeffcient_2, 0.05,
+              "Kalman fitler matrix a coeffcients, a_matrix_(1, 3)");
+
+/// calibration_config_manager.cc
+DEFINE_int32(obs_camera_detector_gpu, 0, "device id for camera detector");
+
+// obstacle/onboard/lane_post_processing_subnode.cc
+DEFINE_string(onboard_lane_post_processor, "CCLanePostProcessor",
+              "onboard lane post-processing algorithm name");
+
+/// visualization
+
+DEFINE_bool(show_radar_objects, false, "");
+
+DEFINE_bool(show_camera_objects2d, false, "");
+DEFINE_bool(show_camera_objects, false, "");
+DEFINE_bool(show_camera_parsing, false, "");
+
+DEFINE_bool(show_fused_objects, false, "");
+
+DEFINE_bool(show_fusion_association, false, "");
+
+DEFINE_bool(capture_screen, false, "");
+
+DEFINE_string(screen_output_dir, "./", "");
+
+DEFINE_string(frame_visualizer, "GLFusionVisualizer", "");
+
+DEFINE_bool(async_fusion, false, "use distance angle ");
+DEFINE_bool(use_distance_angle_fusion, true,
+            "use distance angle prob distance in fusion");
+DEFINE_bool(publish_fusion_event, false, "publish fusion event");
+DEFINE_bool(bag_mode, false, "run perception in bag mode");
+
+DEFINE_bool(show_motion, false, "visualize motion and object trajectories");

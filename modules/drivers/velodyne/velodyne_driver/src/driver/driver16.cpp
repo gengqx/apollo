@@ -26,7 +26,7 @@ namespace apollo {
 namespace drivers {
 namespace velodyne {
 
-Velodyne16Driver::Velodyne16Driver(Config config) {
+Velodyne16Driver::Velodyne16Driver(const Config &config) {
   config_ = config;
 }
 
@@ -63,7 +63,7 @@ bool Velodyne16Driver::poll(void) {
       new velodyne_msgs::VelodyneScanUnified);
 
   if (basetime_ == 0) {
-    usleep(100); // waiting for positioning data
+    usleep(100);  // waiting for positioning data
     return true;
   }
 

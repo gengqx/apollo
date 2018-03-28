@@ -8,13 +8,15 @@ export default [
             2: 'Near',
             3: 'Overhead',
             4: 'Map'
-        }
+        },
+        supportInOfflineView: true,
     },
     {
         id: 'perception',
         title: 'Perception',
         type: 'checkbox',
         data: {
+            perceptionPointCloud: 'Point Cloud',
             perceptionVehicle: 'Vehicle',
             perceptionPedestrian: 'Pedestrian',
             perceptionBicycle: 'Bicycle',
@@ -24,7 +26,8 @@ export default [
             perceptionVelocity: 'Velocity',
             perceptionHeading: 'Heading',
             perceptionId: 'Id'
-        }
+        },
+        supportInOfflineView: true,
     }, {
         id: 'prediction',
         title: 'Prediction',
@@ -32,14 +35,16 @@ export default [
         data: {
             predictionMajor: 'Major Prediction Line',
             predictionMinor: 'Minor Prediction Line'
-        }
+        },
+        supportInOfflineView: true,
     }, {
         id: 'routing',
         title: 'Routing',
         type: 'checkbox',
         data: {
             routing: 'Routing Line'
-        }
+        },
+        supportInOfflineView: true,
     }, {
         id: 'decision',
         title: 'Decision',
@@ -47,16 +52,42 @@ export default [
         data: {
             decisionMain: 'Main Decision',
             decisionObstacle: 'Obstacle Decision',
-        }
+        },
+        supportInOfflineView: true,
     }, {
         id: 'planning',
         title: 'Planning',
         type: 'checkbox',
         data: {
-            planningReference: 'Reference Line',
-            planingDpOptimizer: 'Dp Optimizer Line',
-            planningQpOptimizer: 'Qp Optimizer Line',
+            planningCar: 'Planning Car',
             planningLine: 'Planning Line',
-        }
+            planningQpOptimizer: 'Qp Optimizer Line',
+            planningDpOptimizer: 'Dp Optimizer Line',
+            planningReference: 'Reference Line',
+        },
+        supportInOfflineView: true,
+    }, {
+        id: 'position',
+        title: 'Position',
+        type: 'checkbox',
+        data: {
+            positionLocalization: 'Localization',
+            positionGps: 'GPS',
+        },
+        supportInOfflineView: false,
+    }, {
+        id: 'map',
+        title: 'Map',
+        type: 'checkbox',
+        data: {
+            mapCrosswalk: 'Crosswalk',
+            mapClearArea: 'Clear Area',
+            mapJunction: 'Junction',
+            mapLane: 'Lane',
+            mapRoad: 'Road',
+            mapSignal: 'Signal',
+            mapStopSign: 'Stop Sign',
+        },
+        supportInOfflineView: false,
     },
 ];

@@ -23,9 +23,9 @@
 
 #include <vector>
 
+#include "Eigen/Dense"
 #include "IpTNLP.hpp"
 #include "IpTypes.hpp"
-#include "Eigen/Dense"
 #include "modules/planning/math/curve1d/quintic_spiral_path.h"
 
 namespace apollo {
@@ -44,6 +44,8 @@ class SpiralProblemInterface : public Ipopt::TNLP {
 
   void set_end_point(const double x, const double y, const double theta,
                      const double kappa, const double dkappa);
+
+  void set_end_point_position(const double x, const double y);
 
   void get_optimization_results(std::vector<double>* ptr_theta,
                                 std::vector<double>* ptr_kappa,
@@ -158,6 +160,8 @@ class SpiralProblemInterface : public Ipopt::TNLP {
   double end_kappa_ = 0.0;
 
   double end_dkappa_ = 0.0;
+
+  bool has_fixed_end_point_position_ = false;
 };
 
 }  // namespace planning

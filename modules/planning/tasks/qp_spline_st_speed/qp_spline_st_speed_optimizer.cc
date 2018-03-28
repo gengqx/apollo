@@ -15,7 +15,7 @@
  *****************************************************************************/
 
 /**
- * @file qp_spline_st_speed_optimizer.cc
+ * @file
  **/
 
 #include "modules/planning/tasks/qp_spline_st_speed/qp_spline_st_speed_optimizer.h"
@@ -75,31 +75,71 @@ Status QpSplineStSpeedOptimizer::Process(const SLBoundary& adc_sl_boundary,
     return Status(ErrorCode::PLANNING_ERROR, msg);
   }
 
-  StBoundaryMapper boundary_mapper(adc_sl_boundary, st_boundary_config_,
-                                   reference_line, path_data,
-                                   qp_st_speed_config_.total_path_length(),
-                                   qp_st_speed_config_.total_time());
+  StBoundaryMapper boundary_mapper(
+      adc_sl_boundary, st_boundary_config_, reference_line, path_data,
+      qp_st_speed_config_.total_path_length(), qp_st_speed_config_.total_time(),
+      reference_line_info_->IsChangeLanePath());
 
   for (const auto* path_obstacle : path_decision->path_obstacles().Items()) {
     DCHECK(path_obstacle->HasLongitudinalDecision());
   }
   // step 1 get boundaries
   path_decision->EraseStBoundaries();
-  if (boundary_mapper.GetGraphBoundary(path_decision).code() ==
+  if (boundary_mapper.CreateStBoundary(path_decision).code() ==
       ErrorCode::PLANNING_ERROR) {
     return Status(ErrorCode::PLANNING_ERROR,
                   "Mapping obstacle for qp st speed optimizer failed!");
   }
 
   std::vector<const StBoundary*> boundaries;
-  for (const auto* obstacle : path_decision->path_obstacles().Items()) {
+  for (auto* obstacle : path_decision->path_obstacles().Items()) {
+    auto id = obstacle->Id();
     if (!obstacle->st_boundary().IsEmpty()) {
+      path_decision->Find(id)->SetBlockingObstacle(true);
       boundaries.push_back(&obstacle->st_boundary());
+    } else if (FLAGS_enable_side_vehicle_st_boundary &&
+               (adc_sl_boundary.start_l() > 2.0 ||
+                adc_sl_boundary.end_l() < -2.0)) {
+      if (obstacle->obstacle()->IsVirtual()) {
+        continue;
+      }
+      if (path_decision->Find(id)->reference_line_st_boundary().IsEmpty()) {
+        continue;
+      }
+      auto st_boundary_copy =
+          path_decision->Find(id)->reference_line_st_boundary();
+      auto st_boundary = st_boundary_copy.CutOffByT(3.5);
+      if (!st_boundary.IsEmpty()) {
+        auto decision = obstacle->LongitudinalDecision();
+        if (decision.has_yield()) {
+          st_boundary.SetBoundaryType(StBoundary::BoundaryType::YIELD);
+        } else if (decision.has_overtake()) {
+          st_boundary.SetBoundaryType(StBoundary::BoundaryType::OVERTAKE);
+        } else if (decision.has_follow()) {
+          st_boundary.SetBoundaryType(StBoundary::BoundaryType::FOLLOW);
+        } else if (decision.has_stop()) {
+          st_boundary.SetBoundaryType(StBoundary::BoundaryType::STOP);
+        } else if (decision.has_ignore()) {
+          continue;
+        } else {
+          AWARN << "Obstacle " << id << " has unhandled decision type: "
+                << decision.ShortDebugString();
+        }
+        st_boundary.SetId(st_boundary_copy.id());
+        st_boundary.SetCharacteristicLength(
+            st_boundary_copy.characteristic_length());
+
+        path_decision->SetStBoundary(id, st_boundary);
+        boundaries.push_back(&obstacle->st_boundary());
+      }
     }
   }
 
+  SpeedLimitDecider speed_limit_decider(st_boundary_config_, reference_line,
+                                        path_data);
   SpeedLimit speed_limits;
-  if (boundary_mapper.GetSpeedLimits(&speed_limits) != Status::OK()) {
+  if (speed_limit_decider.GetSpeedLimits(path_decision->path_obstacles(),
+                                         &speed_limits) != Status::OK()) {
     return Status(ErrorCode::PLANNING_ERROR,
                   "GetSpeedLimits for qp st speed optimizer failed!");
   }
@@ -108,7 +148,7 @@ Status QpSplineStSpeedOptimizer::Process(const SLBoundary& adc_sl_boundary,
   const auto& veh_param =
       common::VehicleConfigHelper::GetConfig().vehicle_param();
   QpSplineStGraph st_graph(spline_generator_.get(), qp_st_speed_config_,
-                           veh_param);
+                           veh_param, reference_line_info_->IsChangeLanePath());
 
   StGraphData st_graph_data(boundaries, init_point, speed_limits,
                             path_data.discretized_path().Length());
@@ -124,8 +164,8 @@ Status QpSplineStSpeedOptimizer::Process(const SLBoundary& adc_sl_boundary,
   auto ret = st_graph.Search(st_graph_data, accel_bound, reference_speed_data,
                              speed_data);
   if (ret != Status::OK()) {
-    AWARN << "Failed to solve with ideal acceleration conditions. Use "
-             "secondary choice instead.";
+    AERROR << "Failed to solve with ideal acceleration conditions. Use "
+              "secondary choice instead.";
 
     accel_bound.first = qp_st_speed_config_.min_deceleration();
     accel_bound.second = qp_st_speed_config_.max_acceleration();

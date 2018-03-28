@@ -2,63 +2,60 @@ syntax = "proto2";
 
 package apollo.data;
 
-import "modules/canbus/proto/canbus_conf.proto";
-import "modules/canbus/proto/chassis_detail.proto";
-import "modules/common/configs/proto/vehicle_config.proto";
-import "modules/control/proto/control_conf.proto";
+import "modules/data/proto/static_info.proto";
 
-message VehicleInfo {
+
+message MapPoint {
+  optional double latitude = 1;
+  optional double longitude = 2;
+}
+
+message Rosbag {
   optional string name = 1;
-  enum Brand {
-    LINCOLN = 1;
+  optional uint64 size = 2;
+  optional int32 version = 3;
+
+  optional double start_time = 4;
+  optional double end_time = 5;
+  optional int32 msg_count = 6;
+
+  message Topic {
+    optional string msg_type = 1;
+    optional int32 msg_count = 2;
+    optional double frequency = 3;
   }
-  optional Brand brand = 2;
-  enum Model {
-    // Lincoln model
-    MKZ = 1;
-  }
-  optional Model model = 3;
-  optional apollo.canbus.License license = 4;
-  optional apollo.canbus.CanbusConf canbus_conf = 5;
-  optional apollo.common.VehicleConfig vehicle_config = 6;
-  optional apollo.control.ControlConf control_config = 7;
+  map<string, Topic> topics = 7;
 }
 
-message EnvironmentInfo {
-  optional float temperature = 1;  // Temperature in degrees Celsius.
-  // TODO(xiaoxq): weather, rare condition, etc.
+message Disengagement {
+  optional double time = 1;
+  optional MapPoint location = 2;
+  optional string desc = 3;
 }
 
-message HardwareInfo {
-  // Entries of hardware config file path and its content.
-  map<string, string> configs = 1;
-}
-
-message SoftwareInfo {
-  optional string docker_image = 1;
-  optional string commit_id = 2;
-  // Entries of software config file path and its content.
-  map<string, string> configs = 3;
-}
-
-message UserInfo {
-  optional string entity = 1;  // Company, university, organization, etc.
-  optional string driver = 2;
-  optional string co_driver = 3;
-}
-
-message TaskData {
-  optional string task_id = 1;
-  // Raw files uri, such as file://, http://, ftp://, hdfs://, etc.
-  repeated string rosbags = 2;
-}
-
-// A task is typically a piece of data which is recorded continuously.
 message Task {
-  optional VehicleInfo vehicle = 1;
-  optional EnvironmentInfo environment = 2;
-  optional HardwareInfo hardware = 3;
-  optional SoftwareInfo software = 4;
-  optional UserInfo user = 5;
-  optional TaskData data = 6;
+  // Generally it should be <vehicle_name>/<start_time>, such as
+  // "mkz9/2018-01-05-09-14-33".
+  optional string id = 1;
+  // Generally it is bags[0].start_time and bags[-1].end_time.
+  optional double start_time = 2;
+  optional double end_time = 3;
+
+  enum LoopType {
+    UNKNOWN = 0;
+    OPEN_LOOP = 1;
+    CLOSE_LOOP = 2;
+  }
+  optional LoopType loop_type = 4;
+
+  optional StaticInfo info = 5;
+  repeated Rosbag bags = 6;
+
+  // Statistical information.
+  repeated string topics = 7;
+  repeated Disengagement disengagements = 8;
+  repeated MapPoint map_path = 9;
+  // Driving mode to mileage.
+  // Key should be an Enum name of apollo.canbus.Chassis.DrivingMode.
+  map<string, double> mileage = 10;
 }

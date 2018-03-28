@@ -9,11 +9,10 @@
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ *implied. See the License for the specific language governing
+ *permissions and limitations under the License.
  *****************************************************************************/
-
 /**
  * @file
  * @brief Define lane sequence predictor
@@ -22,9 +21,8 @@
 #ifndef MODULES_PREDICTION_PREDICTOR_LANE_SEQUENCE_LANE_SEQUENCE_PREDICTOR_H_
 #define MODULES_PREDICTION_PREDICTOR_LANE_SEQUENCE_LANE_SEQUENCE_PREDICTOR_H_
 
-// #include <string>
+#include <string>
 #include <vector>
-// #include "Eigen/Dense"
 
 #include "modules/common/math/kalman_filter.h"
 #include "modules/common/proto/pnc_point.pb.h"
@@ -55,16 +53,16 @@ class LaneSequencePredictor : public SequencePredictor {
  protected:
   /**
    * @brief Draw lane sequence trajectory points
-   * @param Kalman filter
+   * @param Obstacle
    * @param Lane sequence
    * @param Total prediction time
-   * @param Prediction frequency
+   * @param Prediction period
    * @param A vector of generated trajectory points
    */
   void DrawLaneSequenceTrajectoryPoints(
-      const common::math::KalmanFilter<double, 4, 2, 0>& kf,
-      const LaneSequence& sequence, double total_time, double freq,
-      std::vector<common::TrajectoryPoint>* points);
+      const Obstacle& obstacle, const LaneSequence& lane_sequence,
+      const double total_time, const double period,
+      std::vector<apollo::common::TrajectoryPoint>* points);
 };
 
 }  // namespace prediction
